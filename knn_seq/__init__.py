@@ -1,0 +1,1 @@
+from knn_seq.translation_knn import TranslationKnnTask
