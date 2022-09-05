@@ -17,7 +17,7 @@ def faiss_index_to_gpu(
     reserve_vecs: Optional[int] = None,
     shard: bool = False,
     precompute: bool = False,
-) -> faiss.GpuIndex:
+): #-> faiss.GpuIndex:
     """Transfers the index from CPU to GPU.
 
     Args:
@@ -51,7 +51,7 @@ def faiss_index_to_gpu(
     return faiss.index_cpu_to_all_gpus(index, co, ngpu=num_gpus)
 
 
-def faiss_index_to_cpu(index: faiss.GpuIndex) -> faiss.Index:
+def faiss_index_to_cpu(index) -> faiss.Index:
     """Transfers the index from GPU to CPU.
 
     Args:
