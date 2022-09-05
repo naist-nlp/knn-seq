@@ -1,6 +1,7 @@
 from knn_seq import utils
 import pytest
 import math
+import numpy as np
 
 class TestBufferLines:            
     def test_type_error1(self):
@@ -155,3 +156,149 @@ class TestReadLines:
             assert progress_split[-1].startswith('{}it'.format(num_lines))
         else:
             assert capsys.readouterr().err == ''
+      
+global caps, double_it
+        
+def caps(strs: [str]) -> [str]:
+    return [s.upper() for s in strs]
+    
+def double_it(x: float) -> float:
+    return x * 2
+    
+def scale(x: float, y: float) -> float:
+    return x * y
+            
+class TestParallelApply:
+    def test_simple(self):
+        result = utils.parallel_apply(double_it, [0.0, 1.0, 2.0, 3.0])
+        assert next(result) == 0
+        assert next(result) == 2.0
+        assert next(result) == 4.0
+        assert next(result) == 6.0
+        with pytest.raises(StopIteration):
+            next(result)
+            
+    #This fails and I wonder if it should...
+    #There's nothing in the documentation for the function that prohibts this
+    #It works with a single worker, but not with multiple
+    def test_simple_with_two_workers(self):
+        result = utils.parallel_apply(double_it, [0.0, 1.0, 2.0, 3.0], 2)
+        assert next(result) == 0
+        assert next(result) == 2.0
+        assert next(result) == 4.0
+        assert next(result) == 6.0
+        with pytest.raises(StopIteration):
+            next(result)
+            
+    def test_with_args(self):
+        result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, 3)
+        assert next(result) == 0
+        assert next(result) == 3.0
+        assert next(result) == 6.0
+        assert next(result) == 9.0
+        with pytest.raises(StopIteration):
+            next(result)
+            
+    def test_with_kwargs(self):
+        result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, y=3)
+        assert next(result) == 0
+        assert next(result) == 3.0
+        assert next(result) == 6.0
+        assert next(result) == 9.0
+        with pytest.raises(StopIteration):
+            next(result)
+            
+    def test_with_bad_args(self):
+        with pytest.raises(TypeError):
+            result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, 3, 5)
+            next(result)
+            
+    def test_with_bad_kwargs(self):
+        with pytest.raises(TypeError):
+            result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, z=3)
+            next(result)
+            
+    def test_with_no_input(self):
+        def simple() -> int:
+            return 1
+        
+        with pytest.raises(TypeError):
+            result = utils.parallel_apply(simple, [0.0, 1.0, 2.0, 3.0], 1)
+            next(result)
+        
+    def test_with_read_lines(self, tmp_path):
+        lines = ["a"] * 5
+        content = "\n".join(lines)
+        path = tmp_path / "test.txt"
+        path.write_text(content)
+        assert path.read_text() == content
+        
+        result = utils.parallel_apply( 
+            caps,
+            utils.read_lines(path, 3),
+            1)
+        assert next(result) == ["A\n", "A\n", "A\n"]
+        assert next(result) == ["A\n", "A"]
+        with pytest.raises(StopIteration):
+            next(result)
+            
+    #Fails but shouldn't
+    def test_no_workers(self):
+        def double(x: float) -> float:
+            return x * 2
+            
+        with pytest.raises(ValueError):
+            result = utils.parallel_apply(double, [0.0, 1.0, 2.0, 3.0], 0)
+            next(result)
+            
+          
+    def test_with_two_workers(self, tmp_path):
+        lines = ["a"] * 5
+        content = "\n".join(lines)
+        path = tmp_path / "test.txt"
+        path.write_text(content)
+        assert path.read_text() == content
+        
+        result = utils.parallel_apply( 
+                caps,
+                utils.read_lines(path, 3),
+                2)
+                
+        assert next(result) == ["A\n", "A\n", "A\n", "A\n", "A"]
+        with pytest.raises(StopIteration):
+            next(result)
+            
+    def test_with_two_workers2(self, tmp_path):
+        lines = ["a"] * 5
+        content = "\n".join(lines)
+        path = tmp_path / "test.txt"
+        path.write_text(content)
+        assert path.read_text() == content
+        
+        result = utils.parallel_apply( 
+                caps,
+                utils.read_lines(path, 1),
+                2)
+                
+        assert next(result) == ["A\n", "A\n"]
+        assert next(result) == ["A\n", "A\n"]
+        assert next(result) == ["A"]
+        with pytest.raises(StopIteration):
+            next(result)
+            
+    def test_with_too_many_workers(self, tmp_path):
+        lines = ["a"] * 5
+        content = "\n".join(lines)
+        path = tmp_path / "test.txt"
+        path.write_text(content)
+        assert path.read_text() == content
+        
+        result = utils.parallel_apply( 
+                caps,
+                utils.read_lines(path, 3),
+                12)
+                
+        assert next(result) == ["A\n", "A\n", "A\n", "A\n", "A"]
+        with pytest.raises(StopIteration):
+            next(result)
+    
