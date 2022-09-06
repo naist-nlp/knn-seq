@@ -1,7 +1,8 @@
-from fileinput import filename
 import pytest
 
 import io
+import os
+import tempfile
 import h5py
 import numpy as np
 
@@ -22,9 +23,12 @@ def data(bio):
 @pytest.fixture
 def create_tmpdata():
     arr = np.random.randn(5,10).astype("float32")
-    with h5py.File("tests/tmp_data_datastore.h5", mode="w") as f:
+    _, tf = tempfile.mkstemp()
+    with h5py.File(tf, mode="w")as f:
         f.create_dataset("memory", data=arr)
-
+    yield tf
+    os.remove(tf)
+        
 def test_datastore__init__(bio, data):
     assert Datastore(bio, data)
 
@@ -55,14 +59,14 @@ def test_datastore_shape(bio, data):
 @pytest.mark.parametrize("readonly", [True, False])
 def test_datastore__open(create_tmpdata, readonly):
     if readonly:
-        assert Datastore._open("tests/tmp_data_datastore.h5", readonly=readonly)
+        assert Datastore._open(create_tmpdata, readonly=readonly)
     else:
         create_bio = io.BytesIO()
         assert Datastore._open(create_bio, size=5, dim=10, readonly=readonly)
 
     
 def test_datastore_close(create_tmpdata):
-    d = Datastore._open("tests/tmp_data_datastore.h5", readonly=True)
+    d = Datastore._open(create_tmpdata, readonly=True)
     d.close()
     assert not d._memory and not d.hdf5
     
@@ -70,7 +74,7 @@ def test_datastore_close(create_tmpdata):
 @pytest.mark.parametrize("readonly", [True, False])
 def test_datastore_open(create_tmpdata, readonly):
     if readonly:
-        assert Datastore.open("tests/tmp_data_datastore.h5", readonly=readonly)
+        assert Datastore.open(create_tmpdata, readonly=readonly)
     else:
         create_bio = io.BytesIO()
         assert Datastore._open(create_bio, size=5, dim=10, readonly=readonly)
