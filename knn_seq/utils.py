@@ -26,6 +26,9 @@ def buffer_lines(lines: Iterable, buffer_size: int = 10000) -> Iterator[List[str
     Yields:
         List[str]: buffered lines.
     """
+    if buffer_size <= 0:
+        raise ValueError("buffer_size must be at least 1")
+
     buffer = []
     for line in lines:
         buffer.append(line)
