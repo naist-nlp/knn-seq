@@ -19,7 +19,6 @@ class TestBufferLines:
             result_lines = utils.buffer_lines(lines=[])
             next(result_lines)
             
-    #Fails but shouldn't
     @pytest.mark.parametrize('buffer_size', [-1, 0])
     def test_zero_buffer(self, buffer_size):
         with pytest.raises(ValueError):
