@@ -393,4 +393,16 @@ class TestSoftmax:
         result = utils.softmax(tensor)
         assert isinstance(result, torch.Tensor)
         assert torch.equal(result, torch.nn.functional.softmax(tensor, dim=-1, dtype=torch.float32))
-                
+
+class TestLogSoftmax:
+    def test_type_errors(self):
+        tensor = np.arange(5)
+        with pytest.raises(TypeError):
+            result = utils.log_softmax(tensor)
+    
+    @pytest.mark.parametrize('tensor', [torch.eye(5), torch.arange(5), torch.rand((2, 3))])  
+    def test(self, tensor):
+        result = utils.log_softmax(tensor)
+        assert isinstance(result, torch.Tensor)
+        assert torch.equal(result, torch.nn.functional.log_softmax(tensor, dim=-1, dtype=torch.float32))
+        
