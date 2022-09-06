@@ -380,4 +380,17 @@ class TestToDevice:
     def test_nd_array(self, item, use_gpu):
         result = utils.to_device(item, use_gpu=use_gpu)
         assert np.array_equal(result, item)
+        
+        
+class TestSoftmax:
+    def test_type_errors(self):
+        tensor = np.arange(5)
+        with pytest.raises(TypeError):
+            result = utils.softmax(tensor)
+    
+    @pytest.mark.parametrize('tensor', [torch.eye(5), torch.arange(5), torch.rand((2, 3))])  
+    def test(self, tensor):
+        result = utils.softmax(tensor)
+        assert isinstance(result, torch.Tensor)
+        assert torch.equal(result, torch.nn.functional.softmax(tensor, dim=-1, dtype=torch.float32))
                 
