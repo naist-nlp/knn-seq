@@ -41,7 +41,6 @@ class TestBufferLines:
         assert num_repetitions == expected_repetitions
 
 class TestReadLines:
-    def test_type_error1(self):
     @pytest.fixture
     def filepath(self, tmp_path) -> str:
         path = tmp_path / "test.txt"
