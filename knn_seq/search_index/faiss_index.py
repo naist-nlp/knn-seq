@@ -10,6 +10,8 @@ from knn_seq.search_index.search_index import SearchIndex, SearchIndexConfig
 
 logger = logging.getLogger(__name__)
 
+# We wrap the faiss types here to prevent errors when running with faiss-cpu
+# faiss-cpu doesn't have faiss.GpuIndex
 Index = faiss.Index
 GpuIndex = faiss.GpuIndex if hasattr(faiss, 'GpuIndex') else Index
 
