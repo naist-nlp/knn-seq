@@ -24,13 +24,12 @@ def data(bio):
 
 
 @pytest.fixture
-def create_tmpdata():
+def create_tmpdata(tmp_path):
     arr = np.random.randn(5, 10).astype("float32")
-    _, tf = tempfile.mkstemp()
-    with h5py.File(tf, mode="w") as f:
+    tmp_file = tmp_path / "tmp.h5"
+    with h5py.File(tmp_file, mode="w") as f:
         f.create_dataset("memory", data=arr)
-    yield tf
-    os.remove(tf)
+    return tmp_file
 
 
 def test_datastore__init__(bio, data):
