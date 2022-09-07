@@ -95,8 +95,7 @@ class TestToDevice:
     )
     def test_tensor_dict(self, tmp_tensor_dict, from_gpu, to_gpu, is_user_dict):
         if not torch.cuda.is_available() and (to_gpu or from_gpu):
-            warnings.warn("No CUDA available, this test always passes")
-            return
+            pytest.skip("No CUDA available")
 
         if from_gpu:
             tmp_tensor_dict = {k: v.cuda() for k, v in tmp_tensor_dict.items()}
@@ -141,8 +140,7 @@ class TestToDevice:
     )
     def test_tensor_list(self, tmp_tensor_list, from_gpu, to_gpu, is_user_list):
         if not torch.cuda.is_available() and (to_gpu or from_gpu):
-            warnings.warn("No CUDA available, this test always passes")
-            return
+            pytest.skip("No CUDA available")
 
         if from_gpu:
             tmp_tensor_list = [x.cuda() for x in tmp_tensor_list]
