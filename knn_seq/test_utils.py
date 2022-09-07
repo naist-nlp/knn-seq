@@ -43,3 +43,43 @@ class TestBufferLines:
 
         assert num_repetitions == expected_repetitions
         
+ class TestToNDArray:
+    def test_ndarray(self):
+        array = np.arange(5)
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.arange(5))
+
+    def test_torch_cpu(self):
+        array = torch.arange(5).to("cpu")
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.arange(5))
+
+    def test_torch_gpu(self):
+        if not torch.cuda.is_available():
+            warnings.warn("No CUDA available, this test always passes")
+            return
+
+        array = torch.arange(5).to("cuda")
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.arange(5))
+
+    def test_list(self):
+        array = [0, 1, 2, 3, 4]
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.arange(5))
+
+    def test_empty(self):
+        array = torch.tensor([])
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.array([]))
+
+    def test_wrong_type(self):
+        array = "0, 1, 2, 3, 4"
+        with pytest.raises(TypeError):
+            result = utils.to_ndarray(array)
+        
