@@ -129,10 +129,6 @@ class TestReadLines:
             assert capsys.readouterr().err == ""
             
 class TestToDevice:
-    # Note:  The documentation of this function says 'arbitrary data structures', 
-    # but not every kind of data structure is available... 
-    # Maybe we need to make the documentation more explicit?
-
     @pytest.fixture
     def tmp_tensor(self):
         return torch.arange(5)
