@@ -141,7 +141,7 @@ class TestReadLines:
         assert isinstance(result, np.ndarray)
         assert np.array_equal(result, np.arange(5))
 
-    @pytest.mark.skipif(torch.cuda.is_available() == False, reason="requires CUDA")
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
     def test_torch_gpu(self):
         array = torch.arange(5).to("cuda")
         result = utils.to_ndarray(array)
