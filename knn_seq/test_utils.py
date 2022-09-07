@@ -128,6 +128,246 @@ class TestReadLines:
         else:
             assert capsys.readouterr().err == ""
             
+class TestToDevice:
+    @pytest.fixture
+    def tmp_tensor(self):
+        return torch.arange(5)
+
+    @pytest.mark.parametrize(
+        "from_gpu,to_gpu", [(True, True), (True, False), (False, True), (False, False)]
+    )
+    def test_tensor(self, tmp_tensor, from_gpu, to_gpu):
+        if not torch.cuda.is_available() and (to_gpu or from_gpu):
+            pytest.skip("No CUDA available")
+
+        if from_gpu:
+            tmp_tensor.cuda()
+        else:
+            tmp_tensor.cpu()
+
+        result = utils.to_device(tmp_tensor, use_gpu=to_gpu)
+
+        if to_gpu:
+            assert result.device.type == "cuda"
+        else:
+            assert result.device.type == "cpu"
+
+    @pytest.fixture
+    def tmp_tensor_dict(self):
+        temp_dict = {}
+        for i in range(5):
+            temp_dict[i] = torch.rand((3, 2)).cpu()
+
+        return temp_dict
+
+    @pytest.mark.parametrize(
+        "from_gpu,to_gpu,is_user_dict",
+        [
+            (True, True, False),
+            (True, False, False),
+            (False, True, False),
+            (False, False, False),
+            (True, True, True),
+            (True, False, True),
+            (False, True, True),
+            (False, False, True),
+        ],
+    )
+    def test_tensor_dict(self, tmp_tensor_dict, from_gpu, to_gpu, is_user_dict):
+        if not torch.cuda.is_available() and (to_gpu or from_gpu):
+            pytest.skip("No CUDA available")
+
+        if from_gpu:
+            tmp_tensor_dict = {k: v.cuda() for k, v in tmp_tensor_dict.items()}
+
+        if is_user_dict:
+            tmp_tensor_dict = UserDict(tmp_tensor_dict)
+
+        result = utils.to_device(tmp_tensor_dict, use_gpu=to_gpu)
+
+        if to_gpu:
+            for k, v in result.items():
+                assert v.device.type == "cuda"
+        else:
+            for k, v in result.items():
+                assert v.device.type == "cpu"
+
+        if is_user_dict:
+            assert isinstance(result, UserDict)
+        else:
+            assert isinstance(result, dict)
+
+    @pytest.fixture
+    def tmp_tensor_list(self):
+        temp_list = []
+        for i in range(5):
+            temp_list.append(torch.rand((3, 2)).cpu())
+
+        return temp_list
+
+    @pytest.mark.parametrize(
+        "from_gpu,to_gpu,is_user_list",
+        [
+            (True, True, False),
+            (True, False, False),
+            (False, True, False),
+            (False, False, False),
+            (True, True, True),
+            (True, False, True),
+            (False, True, True),
+            (False, False, True),
+        ],
+    )
+    def test_tensor_list(self, tmp_tensor_list, from_gpu, to_gpu, is_user_list):
+        if not torch.cuda.is_available() and (to_gpu or from_gpu):
+            pytest.skip("No CUDA available")
+
+        if from_gpu:
+            tmp_tensor_list = [x.cuda() for x in tmp_tensor_list]
+
+        if is_user_list:
+            tmp_tensor_list = UserList(tmp_tensor_list)
+
+        result = utils.to_device(tmp_tensor_list, use_gpu=to_gpu)
+
+        if to_gpu:
+            for x in result:
+                assert x.device.type == "cuda"
+        else:
+            for x in result:
+                assert x.device.type == "cpu"
+
+        if is_user_list:
+            assert isinstance(result, UserList)
+        else:
+            assert isinstance(result, list)
+
+    @pytest.mark.parametrize(
+        "item, use_gpu", [("hello", True), ("hello", False), (1, True), (1, False)]
+    )
+    def test_other_input(self, item, use_gpu):
+        result = utils.to_device(item, use_gpu=use_gpu)
+        assert result == item
+
+    @pytest.mark.parametrize(
+        "item, use_gpu", [(np.arange(5), True), (np.arange(5), False)]
+    )
+    def test_nd_array(self, item, use_gpu):
+        result = utils.to_device(item, use_gpu=use_gpu)
+        assert np.array_equal(result, item)
+
+
+def caps(strs: [str]) -> [str]:
+    return [s.upper() for s in strs]
+
+
+def double_it(x: float) -> float:
+    return x * 2
+
+
+def scale(x: float, y: float) -> float:
+    return x * y
+
+
+class TestParallelApply:
+    def test_no_workers(self):
+        def double(x: float) -> float:
+            return x * 2
+
+        with pytest.raises(ValueError):
+            result = utils.parallel_apply(double, [0.0, 1.0, 2.0, 3.0], 0)
+            next(result)
+
+    def test_simple(self):
+        result = utils.parallel_apply(double_it, [0.0, 1.0, 2.0, 3.0])
+        assert next(result) == 0
+        assert next(result) == 2.0
+        assert next(result) == 4.0
+        assert next(result) == 6.0
+        with pytest.raises(StopIteration):
+            next(result)
+
+    def test_simple_with_two_workers(self):
+        result = utils.parallel_apply(double_it, [0.0, 1.0, 2.0, 3.0], 2)
+        assert next(result) == [0.0, 2.0]
+        assert next(result) == [4.0, 6.0]
+        with pytest.raises(StopIteration):
+            next(result)
+
+    def test_with_args(self):
+        result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, 3)
+        assert next(result) == 0
+        assert next(result) == 3.0
+        assert next(result) == 6.0
+        assert next(result) == 9.0
+        with pytest.raises(StopIteration):
+            next(result)
+
+    def test_with_kwargs(self):
+        result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, y=3)
+        assert next(result) == 0
+        assert next(result) == 3.0
+        assert next(result) == 6.0
+        assert next(result) == 9.0
+        with pytest.raises(StopIteration):
+            next(result)
+
+    def test_with_bad_args(self):
+        with pytest.raises(TypeError):
+            result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, 3, 5)
+            next(result)
+
+    def test_with_bad_kwargs(self):
+        with pytest.raises(TypeError):
+            result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, z=3)
+            next(result)
+
+    def test_with_no_input(self):
+        def simple() -> int:
+            return 1
+
+        with pytest.raises(TypeError):
+            result = utils.parallel_apply(simple, [0.0, 1.0, 2.0, 3.0], 1)
+            next(result)
+
+    @pytest.fixture
+    def tmp_file(self, tmp_path) -> str:
+        lines = ["a", "b", "c", "d", "e"]
+        content = "\n".join(lines)
+        path = tmp_path / "test.txt"
+        path.write_text(content)
+        return str(path)
+
+    def test_with_read_lines(self, tmp_file):
+        result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 1)
+        assert next(result) == ["A\n", "B\n", "C\n"]
+        assert next(result) == ["D\n", "E"]
+        with pytest.raises(StopIteration):
+            next(result)
+
+    def test_with_two_workers(self, tmp_file):
+        result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 2)
+
+        assert next(result) == ["A\n", "B\n", "C\n", "D\n", "E"]
+        with pytest.raises(StopIteration):
+            next(result)
+
+    def test_with_two_workers2(self, tmp_file):
+        result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 1), 2)
+
+        assert next(result) == ["A\n", "B\n"]
+        assert next(result) == ["C\n", "D\n"]
+        assert next(result) == ["E"]
+        with pytest.raises(StopIteration):
+            next(result)
+
+    def test_with_too_many_workers(self, tmp_file):
+        result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 12)
+
+        assert next(result) == ["A\n", "B\n", "C\n", "D\n", "E"]
+        with pytest.raises(StopIteration):
+            next(result)
+
 class TestSoftmax:
     def test_type_errors(self):
         tensor = np.arange(5)
