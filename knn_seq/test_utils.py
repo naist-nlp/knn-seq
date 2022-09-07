@@ -128,8 +128,6 @@ class TestReadLines:
         else:
             assert capsys.readouterr().err == ""
 
-global caps, double_it
-
 
 def caps(strs: [str]) -> [str]:
     return [s.upper() for s in strs]
