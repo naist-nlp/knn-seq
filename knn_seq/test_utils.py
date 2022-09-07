@@ -141,10 +141,8 @@ class TestReadLines:
         assert isinstance(result, np.ndarray)
         assert np.array_equal(result, np.arange(5))
 
+    @pytest.mark.skipif(torch.cuda.is_available() == False, reason="requires CUDA")
     def test_torch_gpu(self):
-        if not torch.cuda.is_available():
-            pytest.skip("No CUDA available")
-
         array = torch.arange(5).to("cuda")
         result = utils.to_ndarray(array)
         assert isinstance(result, np.ndarray)
@@ -161,11 +159,6 @@ class TestReadLines:
         result = utils.to_ndarray(array)
         assert isinstance(result, np.ndarray)
         assert np.array_equal(result, np.array([]))
-
-    def test_wrong_type(self):
-        array = "0, 1, 2, 3, 4"
-        with pytest.raises(TypeError):
-            result = utils.to_ndarray(array)
         
 class TestPad:
     def test_type_errors(self):
