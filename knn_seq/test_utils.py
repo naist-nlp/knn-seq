@@ -247,10 +247,11 @@ class TestStopwatchMeter:
     def stopwatch(self):
         return utils.StopwatchMeter()
 
-    def test_start(self, stopwatch):
+    def test_start(self, stopwatch, monkeypatch):
+        monkeypatch.setattr(time, "perf_counter", lambda: 120)
         assert stopwatch.start_time == None
         stopwatch.start()
-        assert stopwatch.start_time != None
+        assert stopwatch.start_time == 120
 
     def test_stop_type_errors(self, stopwatch):
         stopwatch.start()
@@ -271,7 +272,9 @@ class TestStopwatchMeter:
             (False, 1, True),
         ],
     )
-    def test_stop(self, capsys, stopwatch, should_start, n, use_prehook):
+    def test_stop(self, capsys, monkeypatch, stopwatch, should_start, n, use_prehook):
+        fake_time = 120
+
         def simple_prehook():
             print("Hello?")
 
@@ -282,8 +285,13 @@ class TestStopwatchMeter:
         assert stopwatch.sum == expected_sum
         assert stopwatch.n == expected_n
 
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
+
         if should_start:
             stopwatch.start()
+
+        fake_time += 5
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         if use_prehook:
             stopwatch.stop(n=n, prehook=simple_prehook)
@@ -293,9 +301,8 @@ class TestStopwatchMeter:
         expected_n += n
 
         if should_start:
-            assert stopwatch.stop_time != None
-            assert stopwatch.sum > 0
-            assert stopwatch.sum < 0.01
+            assert stopwatch.stop_time == fake_time
+            assert stopwatch.sum == 5
             assert stopwatch.n == expected_n
 
             expected_sum = stopwatch.sum
@@ -312,30 +319,37 @@ class TestStopwatchMeter:
         "n, use_prehook, iterations",
         [(1, False, 2), (2, True, 2), (2, False, 5), (0, False, 2), (0, True, 5)],
     )
-    def test_multiple_start_stops(self, capsys, stopwatch, n, use_prehook, iterations):
+    def test_multiple_start_stops(self, capsys, monkeypatch, stopwatch, n, use_prehook, iterations):
         def simple_prehook():
             print("Hello?")
 
         expected_sum = 0
         expected_n = 0
+        fake_time = 120
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         assert stopwatch.stop_time == None
         assert stopwatch.sum == expected_sum
         assert stopwatch.n == expected_n
 
-        for _ in range(iterations):
+        for i in range(iterations):
             stopwatch.start()
+
+            fake_time += 5
+            monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
             if use_prehook:
                 stopwatch.stop(n=n, prehook=simple_prehook)
             else:
                 stopwatch.stop(n=n, prehook=None)
 
-            assert stopwatch.stop_time != None
-            assert stopwatch.sum > expected_sum
-            assert stopwatch.sum - expected_sum < 0.01
+            assert stopwatch.stop_time == fake_time
+            assert stopwatch.sum == 5 * (i + 1)
             expected_sum = stopwatch.sum
             expected_n += n
+
+            fake_time += 2
+            monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         assert stopwatch.n == expected_n
 
@@ -346,25 +360,31 @@ class TestStopwatchMeter:
     @pytest.mark.parametrize(
         "n, use_prehook", [(1, False), (1, True), (2, False), (1, True)]
     )
-    def test_multiple_stops(self, capsys, stopwatch, n, use_prehook):
+    def test_multiple_stops(self, capsys, monkeypatch, stopwatch, n, use_prehook):
         def simple_prehook():
             print("Hello?")
 
-        expected_sum = 0
         expected_n = 0
+        fake_time = 120
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         assert stopwatch.stop_time == None
-        assert stopwatch.sum == expected_sum
+        assert stopwatch.sum == 0
         assert stopwatch.n == expected_n
         stopwatch.start()
+
+        fake_time += 5
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         if use_prehook:
             stopwatch.stop(n=n, prehook=simple_prehook)
         else:
             stopwatch.stop(n=n, prehook=None)
 
-        expected_sum = stopwatch.sum
         expected_n = n
+
+        fake_time += 5
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         # Stop again without calling start
         if use_prehook:
@@ -373,7 +393,7 @@ class TestStopwatchMeter:
             stopwatch.stop(n=n, prehook=None)
 
         # The sum / n should not have increased
-        assert stopwatch.sum == expected_sum
+        assert stopwatch.sum == 5
         assert stopwatch.n == expected_n
 
         if use_prehook:
@@ -381,7 +401,10 @@ class TestStopwatchMeter:
             assert captured_progress == "Hello?\n"
 
     @pytest.mark.parametrize("with_start", [True, False])
-    def test_reset(self, stopwatch, with_start):
+    def test_reset(self, stopwatch, monkeypatch, with_start):
+        fake_time = 120
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
+
         assert stopwatch.sum == 0
         assert stopwatch.n == 0
         assert stopwatch.start_time == None
@@ -389,10 +412,13 @@ class TestStopwatchMeter:
 
         stopwatch.start()
         assert stopwatch.start_time != None
+        fake_time += 5
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
+
         stopwatch.stop()
-        assert stopwatch.stop_time != None
-        assert stopwatch.sum != 0
-        assert stopwatch.n != 0
+        assert stopwatch.stop_time == fake_time
+        assert stopwatch.sum == 5
+        assert stopwatch.n == 1
 
         if with_start:
             stopwatch.start()
@@ -409,62 +435,86 @@ class TestStopwatchMeter:
         "n, iterations",
         [(0, 0), (1, 0), (0, 1), (1, 1), (1, 5), (5, 5)],
     )
-    def test_avg(self, stopwatch, n, iterations):
+    def test_avg(self, stopwatch, monkeypatch, n, iterations):
         assert stopwatch.avg == 0
 
         expected_n = n * iterations
+        fake_time = 120
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         for _ in range(iterations):
             stopwatch.start()
-            time.sleep(0.01)
+
+            fake_time += 5
+            monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
+
             stopwatch.stop(n=n)
-            print(stopwatch.sum)
 
-        assert stopwatch.sum >= 0.01 * iterations
-        assert stopwatch.sum <= 0.02 * iterations
+            fake_time += 2
+            monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
-        expected_avg = stopwatch.sum
+        assert stopwatch.sum == 5 * iterations
+        assert stopwatch.avg == (5 / (n if n != 0 else 1) if iterations > 0 else 0)
 
-        if not isinstance(n, torch.Tensor) and expected_n > 0:
-            expected_avg = stopwatch.sum / expected_n
+    def test_elapsed_time(self, monkeypatch, stopwatch):
+        fake_time = 120
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
-        assert stopwatch.avg == expected_avg
-
-    def test_elapsed_time(self, stopwatch):
         assert stopwatch.elapsed_time == 0
+
         stopwatch.start()
-        assert stopwatch.elapsed_time > 0
-        time.sleep(0.01)
-        assert stopwatch.elapsed_time > 0.01
-        assert stopwatch.elapsed_time < 0.02
+
+        fake_time += 2
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
+        assert stopwatch.elapsed_time == 2
+
+        fake_time += 2
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
+        assert stopwatch.elapsed_time == 4
 
         stopwatch.stop()
         assert stopwatch.elapsed_time == 0
 
-    def test_lap_time(self, stopwatch):
+    def test_lap_time(self, monkeypatch, stopwatch):
+        fake_time = 120
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
         assert stopwatch.lap_time == 0
+        
         stopwatch.start()
-        assert stopwatch.lap_time > 0
-        time.sleep(0.01)
-        assert stopwatch.lap_time > 0.01
-        assert stopwatch.lap_time < 0.02
+
+        fake_time += 2
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
+        assert stopwatch.lap_time == 2
+
+        fake_time += 2
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)   
+        assert stopwatch.lap_time == 4
 
         stopwatch.stop()
-        assert stopwatch.lap_time > 0.01
-        assert stopwatch.lap_time < 0.02
+        assert stopwatch.lap_time == 4
 
-        time.sleep(0.01)
-        assert stopwatch.lap_time < 0.02
+        fake_time += 2
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)   
+        assert stopwatch.lap_time == 4
 
     @pytest.mark.parametrize("label", ["", "hi"])
-    def test_log_time(self, stopwatch, caplog, label):
+    def test_log_time(self, monkeypatch, stopwatch, caplog, label):
+        fake_time = 120
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
+
         stopwatch.log_time(label=label)
         stopwatch.start()
-        time.sleep(0.01)
+        
+        fake_time += 1
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)   
+
         stopwatch.log_time(label=label)
         stopwatch.stop()
         stopwatch.start()
-        time.sleep(0.03)
+        
+        fake_time += 3
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)   
+
         stopwatch.stop()
         stopwatch.log_time(label=label)
         assert caplog.record_tuples == [
@@ -476,11 +526,11 @@ class TestStopwatchMeter:
             (
                 "knn_seq.utils",
                 logging.INFO,
-                "[Time] {}: 0.010 s, avg: 0.000 s, sum: 0.000 s".format(label),
+                "[Time] {}: 1.000 s, avg: 0.000 s, sum: 0.000 s".format(label),
             ),
             (
                 "knn_seq.utils",
                 logging.INFO,
-                "[Time] {}: 0.030 s, avg: 0.020 s, sum: 0.040 s".format(label),
+                "[Time] {}: 3.000 s, avg: 2.000 s, sum: 4.000 s".format(label),
             ),
         ]
