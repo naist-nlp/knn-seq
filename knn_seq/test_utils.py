@@ -43,6 +43,35 @@ class TestBufferLines:
 
         assert num_repetitions == expected_repetitions
         
+class TestPad:
+    def test_type_errors(self):
+        tensor_list = [np.arange(5), np.arange(2)]
+        with pytest.raises(TypeError):
+            result = utils.pad(tensor_list)
+
+    def test_value_error(self):
+        tensor_list = [torch.eye(2), torch.arange(1)]
+        with pytest.raises(ValueError):
+            result = utils.pad(tensor_list, -1)
+
+    @pytest.mark.parametrize(
+        "tensor_list, padding_idx, expected_value",
+        [
+            ([torch.arange(1), torch.arange(2)], -1, torch.tensor([[0, -1], [0, 1]])),
+            ([torch.arange(2), torch.arange(1)], -1, torch.tensor([[0, 1], [0, -1]])),
+            ([torch.arange(1), torch.arange(1)], -1, torch.tensor([[0], [0]])),
+            (
+                [torch.arange(4), torch.arange(1)],
+                -1,
+                torch.tensor([[0, 1, 2, 3], [0, -1, -1, -1]]),
+            ),
+        ],
+    )
+    def test(self, tensor_list, padding_idx, expected_value):
+        result = utils.pad(tensor_list, padding_idx)
+        assert isinstance(result, torch.Tensor)
+        assert torch.equal(result, expected_value)
+
 class TestStopwatchMeter:
     @pytest.fixture
     def stopwatch(self):
@@ -285,3 +314,4 @@ class TestStopwatchMeter:
                 "[Time] {}: 0.030 s, avg: 0.020 s, sum: 0.040 s".format(label),
             ),
         ]
+
