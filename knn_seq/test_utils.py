@@ -53,6 +53,13 @@ class TestStopwatchMeter:
         stopwatch.start()
         assert stopwatch.start_time != None
 
+    def test_stop_type_errors(self, stopwatch):
+        stopwatch.start()
+        with pytest.raises(TypeError):
+            stopwatch.stop(n=torch.arange(2))
+            stopwatch.stop(n=5.0)
+            stopwatch.stop(n="2")
+
     @pytest.mark.parametrize(
         "should_start, n, use_prehook",
         [
@@ -61,7 +68,6 @@ class TestStopwatchMeter:
             (True, 2, False),
             (False, 2, False),
             (True, 0, False),
-            (True, torch.arange(2), False),
             (True, 1, True),
             (False, 1, True),
         ],
@@ -91,7 +97,7 @@ class TestStopwatchMeter:
             assert stopwatch.stop_time != None
             assert stopwatch.sum > 0
             assert stopwatch.sum < 0.01
-            # assert stopwatch.n == expected_n need to handle the case the n is a tensor...
+            assert stopwatch.n == expected_n
 
             expected_sum = stopwatch.sum
         else:
@@ -132,7 +138,7 @@ class TestStopwatchMeter:
             expected_sum = stopwatch.sum
             expected_n += n
 
-        # assert stopwatch.n == expected_n # Do I need to handle the case the n is a tensor?
+        assert stopwatch.n == expected_n
 
         if use_prehook:
             captured_progress = capsys.readouterr().out
@@ -202,7 +208,7 @@ class TestStopwatchMeter:
 
     @pytest.mark.parametrize(
         "n, iterations",
-        [(0, 0), (1, 0), (0, 1), (1, 1), (1, 5), (5, 5), (torch.arange(2), 2)],
+        [(0, 0), (1, 0), (0, 1), (1, 1), (1, 5), (5, 5)],
     )
     def test_avg(self, stopwatch, n, iterations):
         assert stopwatch.avg == 0
