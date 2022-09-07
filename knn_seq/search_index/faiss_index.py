@@ -10,6 +10,10 @@ from knn_seq.search_index.search_index import SearchIndex, SearchIndexConfig
 
 logger = logging.getLogger(__name__)
 
+# We wrap the faiss types here to prevent errors when running with faiss-cpu
+# faiss-cpu doesn't have faiss.GpuIndex
+Index = faiss.Index
+GpuIndex = faiss.GpuIndex if hasattr(faiss, 'GpuIndex') else Index
 
 def faiss_index_to_gpu(
     index: faiss.Index,
@@ -17,7 +21,7 @@ def faiss_index_to_gpu(
     reserve_vecs: Optional[int] = None,
     shard: bool = False,
     precompute: bool = False,
-) -> faiss.GpuIndex:
+) -> GpuIndex:
     """Transfers the index from CPU to GPU.
 
     Args:
@@ -51,7 +55,7 @@ def faiss_index_to_gpu(
     return faiss.index_cpu_to_all_gpus(index, co, ngpu=num_gpus)
 
 
-def faiss_index_to_cpu(index: faiss.GpuIndex) -> faiss.Index:
+def faiss_index_to_cpu(index: GpuIndex) -> faiss.Index:
     """Transfers the index from GPU to CPU.
 
     Args:
