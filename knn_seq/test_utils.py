@@ -11,7 +11,7 @@ class TestBufferLines:
     @pytest.mark.parametrize('lines,buffer_size', [(4, 4), ([4], '4')])
     def test_type_errors(self, lines, buffer_size):
         with pytest.raises(TypeError):
-            for result_lines in utils.buffer_lines(lines=4):
+            for result_lines in utils.buffer_lines(lines=lines, buffer_size=buffer_size):
                 assert result_lines == None
                                 
     def test_zero_lines(self):
@@ -23,7 +23,7 @@ class TestBufferLines:
     def test_zero_buffer(self, buffer_size):
         with pytest.raises(ValueError):
             lines = [1] * 20
-            result_lines = utils.buffer_lines(lines=lines, buffer_size=0)
+            result_lines = utils.buffer_lines(lines=lines, buffer_size=buffer_size)
             next(result_lines)
             
     @pytest.mark.parametrize('num_lines,buffer_size', [(1, 4), (4, 4), (16, 4), (17, 4), (4, 1)])
