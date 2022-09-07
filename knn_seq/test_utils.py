@@ -57,8 +57,7 @@ class TestToDevice:
     )
     def test_tensor(self, tmp_tensor, from_gpu, to_gpu):
         if not torch.cuda.is_available() and (to_gpu or from_gpu):
-            warnings.warn("No CUDA available, this test always passes")
-            return
+            pytest.skip("No CUDA available")
 
         if from_gpu:
             tmp_tensor.cuda()
