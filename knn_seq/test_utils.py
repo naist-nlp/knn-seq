@@ -143,8 +143,7 @@ class TestReadLines:
 
     def test_torch_gpu(self):
         if not torch.cuda.is_available():
-            warnings.warn("No CUDA available, this test always passes")
-            return
+            pytest.skip("No CUDA available")
 
         array = torch.arange(5).to("cuda")
         result = utils.to_ndarray(array)
