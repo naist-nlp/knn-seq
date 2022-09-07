@@ -206,7 +206,7 @@ class TestParallelApply:
 
     @pytest.fixture
     def tmp_file(self, tmp_path) -> str:
-        lines = ["a"] * 5
+        lines = ["a", "b", "c", "d", "e"]
         content = "\n".join(lines)
         path = tmp_path / "test.txt"
         path.write_text(content)
@@ -214,31 +214,31 @@ class TestParallelApply:
 
     def test_with_read_lines(self, tmp_file):
         result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 1)
-        assert next(result) == ["A\n", "A\n", "A\n"]
-        assert next(result) == ["A\n", "A"]
+        assert next(result) == ["A\n", "B\n", "C\n"]
+        assert next(result) == ["D\n", "E"]
         with pytest.raises(StopIteration):
             next(result)
 
     def test_with_two_workers(self, tmp_file):
         result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 2)
 
-        assert next(result) == ["A\n", "A\n", "A\n", "A\n", "A"]
+        assert next(result) == ["A\n", "B\n", "C\n", "D\n", "E"]
         with pytest.raises(StopIteration):
             next(result)
 
     def test_with_two_workers2(self, tmp_file):
         result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 1), 2)
 
-        assert next(result) == ["A\n", "A\n"]
-        assert next(result) == ["A\n", "A\n"]
-        assert next(result) == ["A"]
+        assert next(result) == ["A\n", "B\n"]
+        assert next(result) == ["C\n", "D\n"]
+        assert next(result) == ["E"]
         with pytest.raises(StopIteration):
             next(result)
 
     def test_with_too_many_workers(self, tmp_file):
         result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 12)
 
-        assert next(result) == ["A\n", "A\n", "A\n", "A\n", "A"]
+        assert next(result) == ["A\n", "B\n", "C\n", "D\n", "E"]
         with pytest.raises(StopIteration):
             next(result)
 
