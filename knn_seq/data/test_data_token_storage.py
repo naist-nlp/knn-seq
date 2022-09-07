@@ -1,6 +1,5 @@
 import pytest
 
-import string
 import random
 import numpy as np
 from itertools import chain
@@ -18,7 +17,12 @@ def test_make_offsets():
     )
     assert np.equal(make_offsets(arr1),arr2).all()
     
-POPULATION = string.ascii_letters + string.digits
+
+
+#########################################
+##### Test class TokenStorage
+#########################################
+POPULATION = list(range(100))
 
 def make_sentence():
     length = random.randint(10, 50)
@@ -26,60 +30,69 @@ def make_sentence():
         population=POPULATION, k=length, weights=range(1, len(POPULATION) + 1)
     )
 
-
 @pytest.fixture
-def pre_tokens():
-    data = (
-        [make_sentence() for _ in range(10)]
-    )
-    return data
-
-@pytest.fixture
-def sort_order(pre_tokens):
-    lengths = np.array([len(l) for l in pre_tokens])
-    sort_order = np.argsort(lengths, kind="stable")[::-1]
-    return sort_order
-
-@pytest.fixture
-def lengths(pre_tokens, sort_order):
-    lengths = np.array([len(l) for l in pre_tokens])
+def data():
+    tokens = [make_sentence() for _ in range(10)]
+    lengths = np.array([len(l) for l in tokens])
+    sort_order = np.argsort(lengths, kind="mergesort")[::-1]
     lengths = lengths[sort_order]
-    return lengths
-
-@pytest.fixture
-def tokens(pre_tokens, sort_order):
     tokens = np.array(
-        list(chain.from_iterable(pre_tokens[s_i] for s_i in sort_order))
+        list(chain.from_iterable([tokens[s_i]for s_i in sort_order]))
     )
-    return tokens
-class TestTokenStorage:
+    return tokens, lengths, sort_order
 
+def test__init__(data):
+   tokens, lengths, sort_order = data
+   assert TokenStorage(tokens, lengths, sort_order)
     
-    def test__init__(tokens, lengths, sort_order):
-        assert TokenStorage(tokens, lengths, sort_order)
+def test__getitem__(data):
+    tokens, lengths, sort_order = data
+    ts = TokenStorage(tokens, lengths, sort_order)
+    for i in range(len(lengths)):
+        begin, end = make_offsets(lengths)[i], make_offsets(lengths)[i+1]
+        assert np.equal(ts[i], tokens[begin:end]).all()
+
+def test__len__(data):
+    tokens, lengths, sort_order  = data
+    ts = TokenStorage(tokens, lengths, sort_order)
+    assert np.equal(len(ts), len(lengths))
+
+def test_size(data):
+    tokens, lengths, sort_order  = data
+    ts = TokenStorage(tokens, lengths, sort_order)
+    assert np.equal(ts.size, len(tokens))
+
+def test_tokens(data):
+    tokens, lengths, sort_order  = data
+    ts = TokenStorage(tokens, lengths, sort_order)
+    assert np.equal(ts.tokens, tokens).all()    
+
+def test_sort_order(data):
+    tokens, lengths, sort_order = data
+    ts = TokenStorage(tokens, lengths, sort_order)
+    assert np.equal(ts._sort_order, sort_order).all()
+
+def test_orig_order(data):
+    tokens, lengths, sort_order = data
+    ts = TokenStorage(tokens, lengths, sort_order)
+    orig_order = np.zeros_like(ts._sort_order)
+    orig_order[ts._sort_order] = np.arange(len(ts._sort_order))
+    assert np.equal(ts._orig_order, orig_order).all()
+    
+#def test_get_interval():
+#    tokens, lengths, sort_order = data
+#    ts = TokenStorage(tokens, lengths, sort_order)
+#    for i in range(len(lengths)):
         
-    #def test__getitem__():
-    #    
-    #def test__len__():
-    #    
-    #def test_size():
-    #
-    #def test_tokens():
-    #
-    #def test_sort_order():
-    #
-    #def test_orig_order():
-    #    
-    #def test_get_interval():
-    #    
-    #def test_binarize():
-    #    
-    #def test_load_from_fairseq_dataset():
-    #    
-    #def test_save():
-    #    
-    #def test_load():
-    #
-    #def test_merge():
-    #    
-    #
+        
+    
+#def test_binarize():
+#    
+#def test_load_from_fairseq_dataset():
+#    
+#def test_save():
+#    
+#def test_load():
+#
+#def test_merge():
+    
