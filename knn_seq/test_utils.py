@@ -368,6 +368,38 @@ class TestParallelApply:
         with pytest.raises(StopIteration):
             next(result)
 
+class TestToNDArray:
+    def test_ndarray(self):
+        array = np.arange(5)
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.arange(5))
+
+    def test_torch_cpu(self):
+        array = torch.arange(5).to("cpu")
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.arange(5))
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_torch_gpu(self):
+        array = torch.arange(5).to("cuda")
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.arange(5))
+
+    def test_list(self):
+        array = [0, 1, 2, 3, 4]
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.arange(5))
+
+    def test_empty(self):
+        array = torch.tensor([])
+        result = utils.to_ndarray(array)
+        assert isinstance(result, np.ndarray)
+        assert np.array_equal(result, np.array([]))
+
 class TestSoftmax:
     def test_type_errors(self):
         tensor = np.arange(5)
