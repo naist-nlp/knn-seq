@@ -5,13 +5,16 @@ import numpy as np
 import torch
 from collections import UserDict, UserList
 import time
+import logging
 
 
 class TestBufferLines:
-    @pytest.mark.parametrize("lines,buffer_size", [(4, 4), ([4], "4")])
+    @pytest.mark.parametrize(("lines", "buffer_size"), [(4, 4), ([4], "4")])
     def test_type_errors(self, lines, buffer_size):
         with pytest.raises(TypeError):
-            for result_lines in utils.buffer_lines(lines=lines, buffer_size=buffer_size):
+            for result_lines in utils.buffer_lines(
+                lines=lines, buffer_size=buffer_size
+            ):
                 assert result_lines == None
 
     def test_zero_lines(self):
@@ -42,7 +45,8 @@ class TestBufferLines:
                 assert len(result_lines) == buffer_size
 
         assert num_repetitions == expected_repetitions
-        
+
+
 class TestReadLines:
     @pytest.fixture
     def tmp_file(self, tmp_path) -> str:
@@ -72,7 +76,7 @@ class TestReadLines:
     def test_empty_file(self, tmp_file):
         tmp_file.write_text("")
         result_lines = utils.read_lines(input=str(tmp_file), buffer_size=1)
-        
+
         with pytest.raises(StopIteration):
             next(result_lines)
 
@@ -127,6 +131,7 @@ class TestReadLines:
             assert progress_split[-1].startswith("{}it".format(num_lines))
         else:
             assert capsys.readouterr().err == ""
+
 
 class TestPad:
     def test_type_errors(self):
@@ -232,13 +237,15 @@ class TestStopwatchMeter:
         "n, use_prehook, iterations",
         [(1, False, 2), (2, True, 2), (2, False, 5), (0, False, 2), (0, True, 5)],
     )
-    def test_multiple_start_stops(self, capsys, monkeypatch, stopwatch, n, use_prehook, iterations):
+    def test_multiple_start_stops(
+        self, capsys, monkeypatch, stopwatch, n, use_prehook, iterations
+    ):
         def simple_prehook():
             print("Hello?")
 
         expected_sum = 0
         expected_n = 0
-        fake_time = 120            
+        fake_time = 120
         monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         assert stopwatch.stop_time == None
@@ -381,7 +388,7 @@ class TestStopwatchMeter:
         fake_time = 120
         monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
         assert stopwatch.lap_time == 0
-        
+
         stopwatch.start()
 
         fake_time += 2
@@ -403,13 +410,13 @@ class TestStopwatchMeter:
 
         stopwatch.log_time(label=label)
         stopwatch.start()
-        
+
         fake_time += 1
 
         stopwatch.log_time(label=label)
         stopwatch.stop()
         stopwatch.start()
-        
+
         fake_time += 3
 
         stopwatch.stop()
