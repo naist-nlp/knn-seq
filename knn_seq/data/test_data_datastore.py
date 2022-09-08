@@ -1,8 +1,6 @@
 import pytest
 
 import io
-import os
-import tempfile
 import h5py
 import numpy as np
 
@@ -53,17 +51,17 @@ def test_datastore_dim(bio, data):
 
 def test_datastore_dtype(bio, data):
     d = Datastore(bio, data)
-    assert np.equal(d.dtype, np.dtype("float32"))
+    assert np.issubdtype(d.dtype, np.float32)
 
 
 def test_datastore___getitem__(bio, data):
     d = Datastore(bio, data)
-    assert np.equal(d[0], data[0]).all()
+    assert np.array_equal(d[0], data[0])
 
 
 def test_datastore_shape(bio, data):
     d = Datastore(bio, data)
-    assert np.equal(d.shape, data.shape).all()
+    assert np.array_equal(d.shape, data.shape)
 
 
 @pytest.mark.parametrize("readonly", [True, False])
@@ -94,5 +92,5 @@ def test_datastore_add(bio, data):
     d = Datastore(bio, data)
     k = np.random.randn(2, 10).astype("float32")
     d.add(k)
-    assert np.equal(d[1], k[1]).all()
+    assert np.array_equal(d[1], k[1])
     assert d._write_pointer == 2
