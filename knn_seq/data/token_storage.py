@@ -40,13 +40,13 @@ class TokenStorage:
         self.lengths = lengths
         self.offsets = make_offsets(lengths)
         self._sort_order = sort_order
-        orig_order = np.zeros_like(self.sort_order)
-        orig_order[self.sort_order] = np.arange(len(self.sort_order))
+        orig_order = np.zeros_like(self._sort_order)
+        orig_order[self._sort_order] = np.arange(len(self._sort_order))
         self._orig_order = orig_order
 
     def __getitem__(self, idx: int) -> NDArray:
         begin, end = self.offsets[idx], self.offsets[idx + 1]
-        return self.tokens[begin:end]
+        return self._tokens[begin:end]
 
     def __len__(self) -> int:
         return self.lengths.size
@@ -54,7 +54,7 @@ class TokenStorage:
     @property
     def size(self) -> int:
         """Returns the number of all tokens."""
-        return self.tokens.size
+        return self._tokens.size
 
     @property
     def tokens(self) -> NDArray:
@@ -89,7 +89,7 @@ class TokenStorage:
         Returns:
             NDArray: datastore keys.
         """
-        ds_idx = self.orig_order[idx]
+        ds_idx = self._orig_order[idx]
         return np.arange(self.offsets[ds_idx], self.offsets[ds_idx + 1])
 
     @classmethod
@@ -142,9 +142,9 @@ class TokenStorage:
         path = os.path.join(save_dir, "values.bin")
         logger.info(f"Saving the binarized sequences to `{path}'")
         with h5py.File(path, mode="w") as f:
-            f.create_dataset("tokens", data=self.tokens, dtype=np.int32)
+            f.create_dataset("tokens", data=self._tokens, dtype=np.int32)
             f.create_dataset("lengths", data=self.lengths, dtype=np.int32)
-            f.create_dataset("sort_order", data=self.sort_order)
+            f.create_dataset("sort_order", data=self._sort_order)
         logger.info("Done")
 
     @classmethod
@@ -171,10 +171,10 @@ class TokenStorage:
 
     def merge(self, save_dir: str, other_dir: str):
         other = TokenStorage.load(other_dir)
-        new_tokens = np.concatenate([self.tokens, other.tokens])
+        new_tokens = np.concatenate([self._tokens, other._tokens])
         new_lengths = np.concatenate([self.lengths, other.lengths])
         new_sort_order = np.concatenate(
-            [self.sort_order, other.sort_order + len(self.sort_order)]
+            [self._sort_order, other._sort_order + len(self._sort_order)]
         )
         self._tokens = new_tokens
         self.lengths = new_lengths
