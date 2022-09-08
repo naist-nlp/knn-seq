@@ -30,7 +30,7 @@ class TestBufferLines:
             next(result_lines)
 
     @pytest.mark.parametrize(
-        "num_lines,buffer_size", [(1, 4), (4, 4), (16, 4), (17, 4), (4, 1)]
+        ("num_lines", "buffer_size"), [(1, 4), (4, 4), (16, 4), (17, 4), (4, 1)]
     )
     def test(self, num_lines, buffer_size):
         expected_repetitions = math.ceil(num_lines / buffer_size)
@@ -58,7 +58,7 @@ class TestReadLines:
             for result_lines in utils.read_lines(input=12, buffer_size=1):
                 assert result_lines == None
 
-    @pytest.mark.parametrize("buffer_size, progress", [("4", True), (1, 100)])
+    @pytest.mark.parametrize(("buffer_size", "progress"), [("4", True), (1, 100)])
     def test_type_errors(self, tmp_file, buffer_size, progress):
         tmp_file.write_text("-")
 
@@ -92,7 +92,7 @@ class TestReadLines:
             next(result_lines)
 
     @pytest.mark.parametrize(
-        "num_lines,buffer_size,progress",
+        ("num_lines", "buffer_size", "progress"),
         [
             (1, 4, True),
             (4, 4, True),
@@ -131,134 +131,6 @@ class TestReadLines:
             assert progress_split[-1].startswith("{}it".format(num_lines))
         else:
             assert capsys.readouterr().err == ""
-            
-class TestToDevice:
-    @pytest.fixture
-    def tmp_tensor(self):
-        return torch.arange(5)
-
-    @pytest.mark.parametrize(
-        "from_gpu,to_gpu", [(True, True), (True, False), (False, True), (False, False)]
-    )
-    def test_tensor(self, tmp_tensor, from_gpu, to_gpu):
-        if not torch.cuda.is_available() and (to_gpu or from_gpu):
-            pytest.skip("No CUDA available")
-
-        if from_gpu:
-            tmp_tensor.cuda()
-        else:
-            tmp_tensor.cpu()
-
-        result = utils.to_device(tmp_tensor, use_gpu=to_gpu)
-
-        if to_gpu:
-            assert result.device.type == "cuda"
-        else:
-            assert result.device.type == "cpu"
-
-    @pytest.fixture
-    def tmp_tensor_dict(self):
-        temp_dict = {}
-        for i in range(5):
-            temp_dict[i] = torch.rand((3, 2)).cpu()
-
-        return temp_dict
-
-    @pytest.mark.parametrize(
-        "from_gpu,to_gpu,is_user_dict",
-        [
-            (True, True, False),
-            (True, False, False),
-            (False, True, False),
-            (False, False, False),
-            (True, True, True),
-            (True, False, True),
-            (False, True, True),
-            (False, False, True),
-        ],
-    )
-    def test_tensor_dict(self, tmp_tensor_dict, from_gpu, to_gpu, is_user_dict):
-        if not torch.cuda.is_available() and (to_gpu or from_gpu):
-            pytest.skip("No CUDA available")
-
-        if from_gpu:
-            tmp_tensor_dict = {k: v.cuda() for k, v in tmp_tensor_dict.items()}
-
-        if is_user_dict:
-            tmp_tensor_dict = UserDict(tmp_tensor_dict)
-
-        result = utils.to_device(tmp_tensor_dict, use_gpu=to_gpu)
-
-        if to_gpu:
-            for k, v in result.items():
-                assert v.device.type == "cuda"
-        else:
-            for k, v in result.items():
-                assert v.device.type == "cpu"
-
-        if is_user_dict:
-            assert isinstance(result, UserDict)
-        else:
-            assert isinstance(result, dict)
-
-    @pytest.fixture
-    def tmp_tensor_list(self):
-        temp_list = []
-        for i in range(5):
-            temp_list.append(torch.rand((3, 2)).cpu())
-
-        return temp_list
-
-    @pytest.mark.parametrize(
-        "from_gpu,to_gpu,is_user_list",
-        [
-            (True, True, False),
-            (True, False, False),
-            (False, True, False),
-            (False, False, False),
-            (True, True, True),
-            (True, False, True),
-            (False, True, True),
-            (False, False, True),
-        ],
-    )
-    def test_tensor_list(self, tmp_tensor_list, from_gpu, to_gpu, is_user_list):
-        if not torch.cuda.is_available() and (to_gpu or from_gpu):
-            pytest.skip("No CUDA available")
-
-        if from_gpu:
-            tmp_tensor_list = [x.cuda() for x in tmp_tensor_list]
-
-        if is_user_list:
-            tmp_tensor_list = UserList(tmp_tensor_list)
-
-        result = utils.to_device(tmp_tensor_list, use_gpu=to_gpu)
-
-        if to_gpu:
-            for x in result:
-                assert x.device.type == "cuda"
-        else:
-            for x in result:
-                assert x.device.type == "cpu"
-
-        if is_user_list:
-            assert isinstance(result, UserList)
-        else:
-            assert isinstance(result, list)
-
-    @pytest.mark.parametrize(
-        "item, use_gpu", [("hello", True), ("hello", False), (1, True), (1, False)]
-    )
-    def test_other_input(self, item, use_gpu):
-        result = utils.to_device(item, use_gpu=use_gpu)
-        assert result == item
-
-    @pytest.mark.parametrize(
-        "item, use_gpu", [(np.arange(5), True), (np.arange(5), False)]
-    )
-    def test_nd_array(self, item, use_gpu):
-        result = utils.to_device(item, use_gpu=use_gpu)
-        assert np.array_equal(result, item)
 
 
 def caps(strs: [str]) -> [str]:
@@ -372,6 +244,7 @@ class TestParallelApply:
         with pytest.raises(StopIteration):
             next(result)
 
+
 class TestToNDArray:
     def test_ndarray(self):
         array = np.arange(5)
@@ -404,6 +277,137 @@ class TestToNDArray:
         assert isinstance(result, np.ndarray)
         assert np.array_equal(result, np.array([]))
 
+
+class TestToDevice:
+    @pytest.fixture
+    def tmp_tensor(self):
+        return torch.arange(5)
+
+    @pytest.mark.parametrize(
+        ("from_gpu", "to_gpu"),
+        [(True, True), (True, False), (False, True), (False, False)],
+    )
+    def test_tensor(self, tmp_tensor, from_gpu, to_gpu):
+        if not torch.cuda.is_available() and (to_gpu or from_gpu):
+            pytest.skip("No CUDA available")
+
+        if from_gpu:
+            tmp_tensor.cuda()
+        else:
+            tmp_tensor.cpu()
+
+        result = utils.to_device(tmp_tensor, use_gpu=to_gpu)
+
+        if to_gpu:
+            assert result.device.type == "cuda"
+        else:
+            assert result.device.type == "cpu"
+
+    @pytest.fixture
+    def tmp_tensor_dict(self):
+        temp_dict = {}
+        for i in range(5):
+            temp_dict[i] = torch.rand((3, 2)).cpu()
+
+        return temp_dict
+
+    @pytest.mark.parametrize(
+        ("from_gpu", "to_gpu", "is_user_dict"),
+        [
+            (True, True, False),
+            (True, False, False),
+            (False, True, False),
+            (False, False, False),
+            (True, True, True),
+            (True, False, True),
+            (False, True, True),
+            (False, False, True),
+        ],
+    )
+    def test_tensor_dict(self, tmp_tensor_dict, from_gpu, to_gpu, is_user_dict):
+        if not torch.cuda.is_available() and (to_gpu or from_gpu):
+            pytest.skip("No CUDA available")
+
+        if from_gpu:
+            tmp_tensor_dict = {k: v.cuda() for k, v in tmp_tensor_dict.items()}
+
+        if is_user_dict:
+            tmp_tensor_dict = UserDict(tmp_tensor_dict)
+
+        result = utils.to_device(tmp_tensor_dict, use_gpu=to_gpu)
+
+        if to_gpu:
+            for k, v in result.items():
+                assert v.device.type == "cuda"
+        else:
+            for k, v in result.items():
+                assert v.device.type == "cpu"
+
+        if is_user_dict:
+            assert isinstance(result, UserDict)
+        else:
+            assert isinstance(result, dict)
+
+    @pytest.fixture
+    def tmp_tensor_list(self):
+        temp_list = []
+        for i in range(5):
+            temp_list.append(torch.rand((3, 2)).cpu())
+
+        return temp_list
+
+    @pytest.mark.parametrize(
+        ("from_gpu", "to_gpu", "is_user_list"),
+        [
+            (True, True, False),
+            (True, False, False),
+            (False, True, False),
+            (False, False, False),
+            (True, True, True),
+            (True, False, True),
+            (False, True, True),
+            (False, False, True),
+        ],
+    )
+    def test_tensor_list(self, tmp_tensor_list, from_gpu, to_gpu, is_user_list):
+        if not torch.cuda.is_available() and (to_gpu or from_gpu):
+            pytest.skip("No CUDA available")
+
+        if from_gpu:
+            tmp_tensor_list = [x.cuda() for x in tmp_tensor_list]
+
+        if is_user_list:
+            tmp_tensor_list = UserList(tmp_tensor_list)
+
+        result = utils.to_device(tmp_tensor_list, use_gpu=to_gpu)
+
+        if to_gpu:
+            for x in result:
+                assert x.device.type == "cuda"
+        else:
+            for x in result:
+                assert x.device.type == "cpu"
+
+        if is_user_list:
+            assert isinstance(result, UserList)
+        else:
+            assert isinstance(result, list)
+
+    @pytest.mark.parametrize(
+        ("item", "use_gpu"), [("hello", True), ("hello", False), (1, True), (1, False)]
+    )
+    def test_other_input(self, item, use_gpu):
+        result = utils.to_device(item, use_gpu=use_gpu)
+        assert result == item
+
+    @pytest.mark.parametrize(
+        ("item", "use_gpu"), [(np.arange(5), True), (np.arange(5), False)]
+    )
+    def test_nd_array(self, item, use_gpu):
+        result = utils.to_device(item, use_gpu=use_gpu)
+        assert np.array_equal(result, item)
+
+
 class TestSoftmax:
     def test_type_errors(self):
         tensor = np.arange(5)
@@ -411,7 +415,14 @@ class TestSoftmax:
             result = utils.softmax(tensor)
 
     @pytest.mark.parametrize(
-        "tensor", [torch.eye(5), torch.arange(5), torch.rand((2, 3)), torch.rand((3, 2), dtype=torch.float16), torch.rand((3, 4, 2), dtype=torch.float64)]
+        "tensor",
+        [
+            torch.eye(5),
+            torch.arange(5),
+            torch.rand((2, 3)),
+            torch.rand((3, 2), dtype=torch.float16),
+            torch.rand((3, 4, 2), dtype=torch.float64),
+        ],
     )
     def test(self, tensor):
         result = utils.softmax(tensor)
@@ -423,9 +434,7 @@ class TestSoftmax:
         expected_result = torch.tensor(e_x / sum, dtype=torch.float32)
 
         assert isinstance(result, torch.Tensor)
-        assert torch.allclose(
-            result, expected_result
-        )
+        assert torch.allclose(result, expected_result)
         assert result.dtype == torch.float32
 
 
@@ -436,7 +445,14 @@ class TestLogSoftmax:
             result = utils.log_softmax(tensor)
 
     @pytest.mark.parametrize(
-        "tensor", [torch.eye(5), torch.arange(5), torch.rand((2, 3)), torch.rand((3, 2), dtype=torch.float16), torch.rand((3, 4, 2), dtype=torch.float64)]
+        "tensor",
+        [
+            torch.eye(5),
+            torch.arange(5),
+            torch.rand((2, 3)),
+            torch.rand((3, 2), dtype=torch.float16),
+            torch.rand((3, 4, 2), dtype=torch.float64),
+        ],
     )
     def test(self, tensor):
         result = utils.log_softmax(tensor)
@@ -448,11 +464,8 @@ class TestLogSoftmax:
         expected_result = torch.tensor(np.log(e_x / sum), dtype=torch.float32)
 
         assert isinstance(result, torch.Tensor)
-        assert torch.allclose(
-            result, expected_result
-        )
+        assert torch.allclose(result, expected_result)
         assert result.dtype == torch.float32
-
 
 
 class TestPad:
@@ -467,7 +480,7 @@ class TestPad:
             result = utils.pad(tensor_list, -1)
 
     @pytest.mark.parametrize(
-        "tensor_list, padding_idx, expected_value",
+        ("tensor_list", "padding_idx", "expected_value"),
         [
             ([torch.arange(1), torch.arange(2)], -1, torch.tensor([[0, -1], [0, 1]])),
             ([torch.arange(2), torch.arange(1)], -1, torch.tensor([[0, 1], [0, -1]])),
@@ -503,7 +516,7 @@ class TestStopwatchMeter:
             stopwatch.stop(n=n)
 
     @pytest.mark.parametrize(
-        "should_start, n, use_prehook",
+        ("should_start", "n", "use_prehook"),
         [
             (True, 1, False),
             (False, 1, False),
@@ -556,7 +569,7 @@ class TestStopwatchMeter:
             assert captured_progress == "Hello?\n"
 
     @pytest.mark.parametrize(
-        "n, use_prehook, iterations",
+        ("n", "use_prehook", "iterations"),
         [(1, False, 2), (2, True, 2), (2, False, 5), (0, False, 2), (0, True, 5)],
     )
     def test_multiple_start_stops(
@@ -598,7 +611,7 @@ class TestStopwatchMeter:
             assert captured_progress == "Hello?\n" * iterations
 
     @pytest.mark.parametrize(
-        "n, use_prehook", [(1, False), (1, True), (2, False), (1, True)]
+        ("n", "use_prehook"), [(1, False), (1, True), (2, False), (1, True)]
     )
     def test_multiple_stops(self, capsys, monkeypatch, stopwatch, n, use_prehook):
         def simple_prehook():
@@ -668,7 +681,7 @@ class TestStopwatchMeter:
             assert stopwatch.start_time == None
 
     @pytest.mark.parametrize(
-        "n, iterations",
+        ("n", "iterations"),
         [(0, 0), (1, 0), (0, 1), (1, 1), (1, 5), (5, 5)],
     )
     def test_avg(self, stopwatch, monkeypatch, n, iterations):
