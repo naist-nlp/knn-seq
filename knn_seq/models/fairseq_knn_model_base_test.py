@@ -2,7 +2,7 @@ from . import fairseq_knn_model_base
 
 
 class TestFairseqKNNModelBase:
-    def test_fit_embed_dim(self, init_models) -> None:
+    def test_get_embed_dim(self, init_models) -> None:
         """test for get_embed_dim()."""
 
         models, saved_args = init_models
