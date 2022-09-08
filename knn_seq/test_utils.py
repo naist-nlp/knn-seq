@@ -422,6 +422,7 @@ class TestSoftmax:
         assert torch.allclose(
             result, expected_result
         )
+        assert result.dtype == torch.float32
 
 
 class TestLogSoftmax:
@@ -446,6 +447,8 @@ class TestLogSoftmax:
         assert torch.allclose(
             result, expected_result
         )
+        assert result.dtype == torch.float32
+
 
 class TestPad:
     def test_type_errors(self):
