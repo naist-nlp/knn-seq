@@ -1,5 +1,6 @@
 import itertools
 import json
+import os
 from dataclasses import asdict
 
 import numpy as np
@@ -60,10 +61,10 @@ class TestSearchIndex:
             pass
 
         @classmethod
-        def load_index(cls):
+        def load_index(cls, path):
             pass
 
-        def save_index(self):
+        def save_index(self, path):
             pass
 
     @pytest.mark.parametrize(
@@ -115,3 +116,27 @@ class TestSearchIndex:
             )
         else:
             assert np.array_equal(inputs, normalized_vectors)
+
+    def test_save_config(self, tmp_path):
+        index_path = tmp_path / "test_index.bin"
+        index = TestSearchIndex.SearchIndexMock(object, SearchIndexConfig())
+        index.save_config(index_path)
+        assert os.path.exists(os.path.splitext(index_path)[0] + ".json")
+
+    def test_load_config(self, tmp_path):
+        index_path = tmp_path / "test_index.bin"
+        cfg = SearchIndexConfig()
+        cfg.save(os.path.splitext(index_path)[0] + ".json")
+        assert cfg == TestSearchIndex.SearchIndexMock.load_config(index_path)
+
+    def test_save(self, tmp_path):
+        index_path = tmp_path / "test_index.bin"
+        index = TestSearchIndex.SearchIndexMock(object, SearchIndexConfig())
+        index.save(index_path)
+        assert os.path.exists(os.path.splitext(index_path)[0] + ".json")
+
+    def test_load(self, tmp_path):
+        index_path = tmp_path / "test_index.bin"
+        cfg = SearchIndexConfig()
+        cfg.save(os.path.splitext(index_path)[0] + ".json")
+        assert cfg == TestSearchIndex.SearchIndexMock.load(index_path).config
