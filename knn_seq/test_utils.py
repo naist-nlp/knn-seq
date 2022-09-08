@@ -253,12 +253,11 @@ class TestStopwatchMeter:
         stopwatch.start()
         assert stopwatch.start_time == 120
 
-    def test_stop_type_errors(self, stopwatch):
+    @pytest.mark.parametrize("n", [torch.arange(2), 5.0, "2"])
+    def test_stop_type_errors(self, stopwatch, n):
         stopwatch.start()
         with pytest.raises(TypeError):
-            stopwatch.stop(n=torch.arange(2))
-            stopwatch.stop(n=5.0)
-            stopwatch.stop(n="2")
+            stopwatch.stop(n=n)
 
     @pytest.mark.parametrize(
         "should_start, n, use_prehook",
@@ -274,6 +273,7 @@ class TestStopwatchMeter:
     )
     def test_stop(self, capsys, monkeypatch, stopwatch, should_start, n, use_prehook):
         fake_time = 120
+        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         def simple_prehook():
             print("Hello?")
@@ -285,13 +285,10 @@ class TestStopwatchMeter:
         assert stopwatch.sum == expected_sum
         assert stopwatch.n == expected_n
 
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
-
         if should_start:
             stopwatch.start()
 
         fake_time += 5
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         if use_prehook:
             stopwatch.stop(n=n, prehook=simple_prehook)
@@ -325,7 +322,7 @@ class TestStopwatchMeter:
 
         expected_sum = 0
         expected_n = 0
-        fake_time = 120
+        fake_time = 120            
         monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         assert stopwatch.stop_time == None
@@ -336,7 +333,6 @@ class TestStopwatchMeter:
             stopwatch.start()
 
             fake_time += 5
-            monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
             if use_prehook:
                 stopwatch.stop(n=n, prehook=simple_prehook)
@@ -349,7 +345,6 @@ class TestStopwatchMeter:
             expected_n += n
 
             fake_time += 2
-            monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         assert stopwatch.n == expected_n
 
@@ -374,7 +369,6 @@ class TestStopwatchMeter:
         stopwatch.start()
 
         fake_time += 5
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         if use_prehook:
             stopwatch.stop(n=n, prehook=simple_prehook)
@@ -382,9 +376,7 @@ class TestStopwatchMeter:
             stopwatch.stop(n=n, prehook=None)
 
         expected_n = n
-
         fake_time += 5
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         # Stop again without calling start
         if use_prehook:
@@ -413,7 +405,6 @@ class TestStopwatchMeter:
         stopwatch.start()
         assert stopwatch.start_time != None
         fake_time += 5
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         stopwatch.stop()
         assert stopwatch.stop_time == fake_time
@@ -446,12 +437,9 @@ class TestStopwatchMeter:
             stopwatch.start()
 
             fake_time += 5
-            monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
-
             stopwatch.stop(n=n)
 
             fake_time += 2
-            monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
 
         assert stopwatch.sum == 5 * iterations
         assert stopwatch.avg == (5 / (n if n != 0 else 1) if iterations > 0 else 0)
@@ -465,11 +453,9 @@ class TestStopwatchMeter:
         stopwatch.start()
 
         fake_time += 2
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
         assert stopwatch.elapsed_time == 2
 
         fake_time += 2
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
         assert stopwatch.elapsed_time == 4
 
         stopwatch.stop()
@@ -483,18 +469,15 @@ class TestStopwatchMeter:
         stopwatch.start()
 
         fake_time += 2
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)
         assert stopwatch.lap_time == 2
 
         fake_time += 2
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)   
         assert stopwatch.lap_time == 4
 
         stopwatch.stop()
         assert stopwatch.lap_time == 4
 
         fake_time += 2
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)   
         assert stopwatch.lap_time == 4
 
     @pytest.mark.parametrize("label", ["", "hi"])
@@ -506,14 +489,12 @@ class TestStopwatchMeter:
         stopwatch.start()
         
         fake_time += 1
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)   
 
         stopwatch.log_time(label=label)
         stopwatch.stop()
         stopwatch.start()
         
         fake_time += 3
-        monkeypatch.setattr(time, "perf_counter", lambda: fake_time)   
 
         stopwatch.stop()
         stopwatch.log_time(label=label)
