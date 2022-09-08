@@ -10,10 +10,7 @@ from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 def init_models():
     """Load pre-trained model for test."""
 
-    scriptdir = os.path.dirname(os.path.abspath(__file__))
-    os.chdir(scriptdir)
-
-    filenames = ["../../data/checkpoints/checkpoint_best.pt"]
+    filenames = ["data/checkpoints/checkpoint_best.pt"]
 
     parser = options.get_generation_parser()
     args = options.parse_args_and_arch(parser, input_args=["../../data/data-bin"])
