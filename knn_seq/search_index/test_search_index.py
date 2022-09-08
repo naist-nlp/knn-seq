@@ -106,12 +106,12 @@ class TestSearchIndex:
             normalized_vectors.dtype, np.float32
         )
 
-        if metric == "l2" or metric == "ip":
-            assert np.array_equal(inputs, normalized_vectors)
-        elif metric == "cos":
+        if metric == "cos":
             norms = np.linalg.norm(normalized_vectors, axis=-1)
             assert np.allclose(norms, np.ones_like(norms))
             assert np.allclose(
                 inputs / np.linalg.norm(inputs, axis=-1, keepdims=True),
                 normalized_vectors,
             )
+        else:
+            assert np.array_equal(inputs, normalized_vectors)
