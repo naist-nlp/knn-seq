@@ -67,7 +67,7 @@ class TestSearchIndex:
             pass
 
     @pytest.mark.parametrize(
-        "vectors",
+        ("vectors"),
         [
             torch.rand(N, D, dtype=torch.float32),
             torch.rand(N, D, dtype=torch.float16),
@@ -81,9 +81,10 @@ class TestSearchIndex:
         assert isinstance(ndarray, np.ndarray) and np.issubdtype(
             ndarray.dtype, np.float32
         )
+        assert np.array_equal(np.array(vectors).astype(np.float32), ndarray)
 
     @pytest.mark.parametrize(
-        "vectors, metric",
+        ("vectors", "metric"),
         itertools.product(
             [
                 torch.rand(N, D, dtype=torch.float32),
@@ -98,11 +99,19 @@ class TestSearchIndex:
         index = TestSearchIndex.SearchIndexMock(
             object, SearchIndexConfig(metric=metric)
         )
+        # Copy input vectors because faiss.normalize_L2() is in-place operation.
+        inputs = np.array(vectors).astype(np.float32).copy()
         normalized_vectors = index.normalize(vectors)
         assert isinstance(normalized_vectors, np.ndarray) and np.issubdtype(
             normalized_vectors.dtype, np.float32
         )
 
-        if metric == "cos":
+        if metric == "l2" or metric == "ip":
+            assert np.array_equal(inputs, normalized_vectors)
+        elif metric == "cos":
             norms = np.linalg.norm(normalized_vectors, axis=-1)
             assert np.allclose(norms, np.ones_like(norms))
+            assert np.allclose(
+                inputs / np.linalg.norm(inputs, axis=-1, keepdims=True),
+                normalized_vectors,
+            )
