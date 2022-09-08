@@ -13,7 +13,7 @@ def init_models():
     filenames = ["data/checkpoints/checkpoint_best.pt"]
 
     parser = options.get_generation_parser()
-    args = options.parse_args_and_arch(parser, input_args=["../../data/data-bin"])
+    args = options.parse_args_and_arch(parser, input_args=["data/data-bin"])
     cfg = convert_namespace_to_omegaconf(args)
     task = tasks.setup_task(cfg.task)
 
