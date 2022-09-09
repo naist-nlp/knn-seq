@@ -1,4 +1,3 @@
-import random
 from itertools import chain
 from typing import List
 
@@ -14,14 +13,9 @@ def test_make_offsets():
     assert np.array_equal(make_offsets(arr1), arr2)
 
 
-POPULATION = list(range(100))
-
-
 def make_sentence():
-    length = random.randint(10, 50)
-    return random.choices(
-        population=POPULATION, k=length, weights=range(1, len(POPULATION) + 1)
-    )
+    length = np.random.randint(10, 50 + 1)  # randint is [x, y)
+    return np.random.randint(0, 100, (length,))
 
 
 def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
