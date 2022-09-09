@@ -144,10 +144,7 @@ class SearchIndex(ABC):
         """
 
     def postprocess_search(
-        self,
-        distances: ndarray,
-        indices: ndarray,
-        idmap: Optional[ndarray] = None,
+        self, distances: ndarray, indices: ndarray, idmap: Optional[ndarray] = None
     ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
         """Post-processes the search results.
 
@@ -155,6 +152,10 @@ class SearchIndex(ABC):
             distances (ndarray): top-k distances.
             indices (ndarray): top-k indices.
             idmap (ndarray, optional): if given, maps the ids. (e.g., [3, 5] -> {0: 3, 1: 5})
+
+        Returns:
+            - torch.FloatTensor: top-k scores.
+            - torch.LongTensor: top-k indices.
         """
         if idmap is not None:
             indices = idmap[indices]
@@ -164,8 +165,6 @@ class SearchIndex(ABC):
 
         if self.metric == "l2":
             distances_tensor: torch.FloatTensor = distances_tensor.neg()
-        elif self.metric == "cos" and (self.is_hnsw and self.is_pq and not self.is_ivf):
-            distances_tensor: torch.FloatTensor = (2 - distances_tensor) / 2
 
         return distances_tensor, indices_tensor
 
@@ -178,8 +177,8 @@ class SearchIndex(ABC):
             k (int): number of nearest neighbors.
 
         Returns:
-            ndarray: top-k distances.
-            ndarray: top-k indices.
+            - ndarray: top-k distances.
+            - ndarray: top-k indices.
         """
 
     def search(
@@ -196,8 +195,8 @@ class SearchIndex(ABC):
             idmap (ndarray, optional): if given, maps the ids. (e.g., [3, 5] -> {0: 3, 1: 5})
 
         Returns:
-            FloatTensor: top-k scores or distances.
-            LongTensor: top-k indices.
+            - FloatTensor: top-k scores.
+            - LongTensor: top-k indices.
         """
         querys = self.normalize(querys)
         distances, indices = self.query(querys, k=k)

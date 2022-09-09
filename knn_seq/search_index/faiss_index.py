@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 # We wrap the faiss types here to prevent errors when running with faiss-cpu
 # faiss-cpu doesn't have faiss.GpuIndex
 Index = faiss.Index
-GpuIndex = faiss.GpuIndex if hasattr(faiss, 'GpuIndex') else Index
+GpuIndex = faiss.GpuIndex if hasattr(faiss, "GpuIndex") else Index
+
 
 def faiss_index_to_gpu(
     index: faiss.Index,
@@ -408,6 +409,21 @@ class FaissIndex(SearchIndex):
             )
         self.index = faiss_index_to_gpu(self.index, shard=True)
         self.use_gpu = True
+
+    def postprocess_search(
+        self, distances: ndarray, indices: ndarray, idmap: Optional[ndarray] = None
+    ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+        """Post-processes the search results.
+
+        Args:
+            distances (ndarray): top-k distances.
+            indices (ndarray): top-k indices.
+            idmap (ndarray, optional): if given, maps the ids. (e.g., [3, 5] -> {0: 3, 1: 5})
+        """
+        distances_tensor = super().postprocess_search(distances, indices, idmap=idmap)
+        if self.metric == "cos" and (self.is_hnsw and self.is_pq and not self.is_ivf):
+            distances_tensor: torch.FloatTensor = (2 - distances_tensor) / 2
+        return distances_tensor, indices_tensor
 
     def query(self, querys: ndarray, k: int = 1) -> Tuple[ndarray, ndarray]:
         """Querys the k-nearest vectors to the index.
