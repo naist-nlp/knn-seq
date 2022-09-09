@@ -78,11 +78,11 @@ class TestTokenStorage:
     def test_sort_order(self, data):
         tokens, lengths, sort_order, _ = data
         ts = TokenStorage(tokens, lengths, sort_order)
-        assert np.array_equal(ts._sort_order, sort_order)
+        assert np.array_equal(ts.sort_order, sort_order)
 
     def test_orig_order(self, data):
         tokens, lengths, sort_order, _ = data
         ts = TokenStorage(tokens, lengths, sort_order)
-        orig_order = np.zeros_like(ts._sort_order)
-        orig_order[ts._sort_order] = np.arange(len(ts._sort_order))
-        assert np.array_equal(ts._orig_order, orig_order)
+        orig_order = np.zeros_like(sort_order)
+        orig_order[sort_order] = np.arange(len(sort_order))
+        assert np.array_equal(ts.orig_order, orig_order)
