@@ -21,7 +21,15 @@ def make_sentence():
 
 
 def invest_match(orig_list: List, ts: TokenStorage) -> bool:
-    """Verify that the tokens of the instance can be restored to the original data."""
+    """Verify that the tokens of the instance can be restored to the original data.
+
+    Args:
+        orig_list (List): source tokens of sentences.
+        ts (:class:`TokenStorage`): TokenStorage object.
+
+    Returns:
+        bool: whether `ts` can be restored to `orig_list`.
+    """
     ts_tokens = []
     for i in ts.orig_order:
         ts_tokens.append(list(ts[i]))
@@ -40,7 +48,3 @@ class TestTokenStorage:
             list(chain.from_iterable([tokens[s_i] for s_i in sort_order]))
         )
         return tokens, lengths, sort_order, orig_tokens
-
-    def test__init__(self, data):
-        tokens, lengths, sort_order, orig_tokens = data
-        assert invest_match(orig_tokens, TokenStorage(tokens, lengths, sort_order))
