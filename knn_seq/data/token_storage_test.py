@@ -17,7 +17,7 @@ def make_sentence():
     )
 
 
-def invest_match(orig_list: List, ts: TokenStorage) -> bool:
+def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
     """Verify that the tokens of the instance can be restored to the original data.
 
     Args:
