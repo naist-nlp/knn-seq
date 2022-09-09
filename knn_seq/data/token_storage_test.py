@@ -37,7 +37,7 @@ def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
 class TestTokenStorage:
     @pytest.fixture
     def data(self):
-        tokens = [make_sentence() for _ in range(10)]
+        tokens = [list(make_sentence()) for _ in range(10)]
         lengths = np.array([len(l) for l in tokens])
         sort_order = np.argsort(lengths, kind="mergesort")[::-1]
         lengths = lengths[sort_order]
