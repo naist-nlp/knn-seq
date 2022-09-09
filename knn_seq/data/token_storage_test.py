@@ -45,3 +45,37 @@ class TestTokenStorage:
             list(chain.from_iterable([tokens[s_i] for s_i in sort_order]))
         )
         return tokens, lengths, sort_order, orig_tokens
+
+    def test__getitem__(self, data):
+        tokens, lengths, sort_order, _ = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        for i in range(len(lengths)):
+            begin, end = make_offsets(lengths)[i], make_offsets(lengths)[i + 1]
+            assert np.array_equal(ts[i], tokens[begin:end])
+
+    def test__len__(self, data):
+        tokens, lengths, sort_order, _ = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        assert np.equal(len(ts), len(lengths))
+
+    def test_size(self, data):
+        tokens, lengths, sort_order, _ = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        assert np.equal(ts.size, len(tokens))
+
+    def test_tokens(self, data):
+        tokens, lengths, sort_order, _ = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        assert np.array_equal(ts.tokens, tokens)
+
+    def test_sort_order(self, data):
+        tokens, lengths, sort_order, _ = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        assert np.array_equal(ts._sort_order, sort_order)
+
+    def test_orig_order(self, data):
+        tokens, lengths, sort_order, _ = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        orig_order = np.zeros_like(ts._sort_order)
+        orig_order[ts._sort_order] = np.arange(len(ts._sort_order))
+        assert np.array_equal(ts._orig_order, orig_order)
