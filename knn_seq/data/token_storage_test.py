@@ -7,9 +7,6 @@ import pytest
 
 from knn_seq.data.token_storage import TokenStorage, make_offsets
 
-#########################################
-##### Test class TokenStorage
-#########################################
 POPULATION = list(range(100))
 
 
