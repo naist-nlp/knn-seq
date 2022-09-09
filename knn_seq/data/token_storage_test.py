@@ -98,3 +98,13 @@ class TestTokenStorage:
                     make_offsets(lengths)[ds_idx], make_offsets(lengths)[ds_idx + 1]
                 ),
             )
+
+    def test_binarize(self, data):
+        tokens, lengths, sort_order, orig_tokens = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        ts_b = TokenStorage.binarize(orig_tokens)
+        assert np.array_equal(ts.tokens, ts_b.tokens)
+        assert np.array_equal(ts.lengths, ts_b.lengths)
+        assert np.array_equal(ts.offsets, ts_b.offsets)
+        assert np.array_equal(ts.sort_order, ts_b.sort_order)
+        assert np.array_equal(ts.orig_order, ts_b.orig_order)
