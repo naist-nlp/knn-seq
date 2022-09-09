@@ -7,7 +7,7 @@ from fairseq.data.language_pair_dataset import LanguagePairDataset
 
 
 class LanguagePairDatasetWithRawSentence(BaseWrapperDataset):
-    """A wrapper for :class:`fairseq.data.LanguagePairDatset` to get raw sentneces.
+    """A wrapper for :class:`fairseq.data.LanguagePairDatset` to get raw sentences.
 
     Args:
         dataset: (LanguagePairDataset): wrapped language pair dataset.
