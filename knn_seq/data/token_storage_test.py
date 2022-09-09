@@ -4,6 +4,9 @@ from typing import List
 
 import numpy as np
 import pytest
+import torch
+from fairseq.data import Dictionary
+from fairseq.data.language_pair_dataset import LanguagePairDataset
 
 from knn_seq.data.token_storage import TokenStorage, make_offsets
 
@@ -24,6 +27,15 @@ def make_sentence():
     )
 
 
+def dummy_dictionary(vocab_size=len(POPULATION), prefix="token_"):
+    d = Dictionary()
+    for i in range(vocab_size):
+        token = prefix + str(i)
+        d.add_symbol(token)
+    d.finalize(padding_factor=1)  # don't add extra padding symbols
+    return d
+
+
 def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
     """Verify that the tokens of the instance can be restored to the original data.
 
@@ -37,7 +49,38 @@ def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
     ts_tokens = []
     for i in ts.orig_order:
         ts_tokens.append(list(ts[i]))
+    print(ts_tokens)
+    print(orig_list)
     return np.array_equal(orig_list, ts_tokens)
+
+
+class TmpDataset(torch.utils.data.Dataset):
+    def __init__(self, data):
+        super().__init__()
+        self.data = data
+        self.sizes = None
+
+    def __getitem__(self, index):
+        return self.data[index]
+
+    def __len__(self):
+        return len(self.data)
+
+
+def fairseq_dataset(tmp_data):
+    _, _, _, orig_data = tmp_data
+    test_data = TmpDataset(orig_data)
+    length = [len(l) for l in orig_data]
+    dict = dummy_dictionary()
+    dataset = LanguagePairDataset(
+        test_data,
+        length,
+        dict,
+        tgt=test_data,
+        tgt_sizes=length,
+        tgt_dict=dict,
+    )
+    return dataset, tmp_data
 
 
 class TestTokenStorage:
@@ -108,3 +151,11 @@ class TestTokenStorage:
         assert np.array_equal(ts.offsets, ts_b.offsets)
         assert np.array_equal(ts.sort_order, ts_b.sort_order)
         assert np.array_equal(ts.orig_order, ts_b.orig_order)
+
+    @pytest.mark.parametrize("target", [True, False])
+    def test_load_from_fairseq_dataset(self, data, target):
+        dataset, (tokens, lengths, sort_order, orig_tokens) = fairseq_dataset(data)
+        ts = TokenStorage(tokens, lengths, sort_order)
+        ts_b = TokenStorage.load_from_fairseq_dataset(dataset, tgt=target)
+        assert invest_match(orig_tokens, ts)
+        assert invest_match(orig_tokens, ts_b)
