@@ -30,6 +30,15 @@ def dummy_dictionary(vocab_size=len(POPULATION), prefix="token_"):
     return d
 
 
+def dummy_dictionary(vocab_size=len(POPULATION), prefix="token_"):
+    d = Dictionary()
+    for i in range(vocab_size):
+        token = prefix + str(i)
+        d.add_symbol(token)
+    d.finalize(padding_factor=1)  # don't add extra padding symbols
+    return d
+
+
 def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
     """Verify that the tokens of the instance can be restored to the original data.
 
