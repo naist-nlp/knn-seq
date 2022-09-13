@@ -21,16 +21,7 @@ def make_sentence():
     return np.random.randint(0, 100, (length,))
 
 
-def dummy_dictionary(vocab_size=len(POPULATION), prefix="token_"):
-    d = Dictionary()
-    for i in range(vocab_size):
-        token = prefix + str(i)
-        d.add_symbol(token)
-    d.finalize(padding_factor=1)  # don't add extra padding symbols
-    return d
-
-
-def dummy_dictionary(vocab_size=len(POPULATION), prefix="token_"):
+def dummy_dictionary(vocab_size=100, prefix="token_"):
     d = Dictionary()
     for i in range(vocab_size):
         token = prefix + str(i)
@@ -52,8 +43,6 @@ def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
     ts_tokens = []
     for i in ts.orig_order:
         ts_tokens.append(list(ts[i]))
-    print(ts_tokens)
-    print(orig_list)
     return np.array_equal(orig_list, ts_tokens)
 
 
@@ -157,8 +146,6 @@ class TestTokenStorage:
 
     @pytest.mark.parametrize("target", [True, False])
     def test_load_from_fairseq_dataset(self, data, target):
-        dataset, (tokens, lengths, sort_order, orig_tokens) = fairseq_dataset(data)
-        ts = TokenStorage(tokens, lengths, sort_order)
+        dataset, (_, _, _, orig_tokens) = fairseq_dataset(data)
         ts_b = TokenStorage.load_from_fairseq_dataset(dataset, tgt=target)
-        assert invest_match(orig_tokens, ts)
         assert invest_match(orig_tokens, ts_b)
