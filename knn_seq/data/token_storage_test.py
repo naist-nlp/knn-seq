@@ -24,7 +24,7 @@ def make_sentence():
 def dummy_dictionary(vocab_size=100, prefix="token_"):
     d = Dictionary()
     for i in range(vocab_size):
-        token = prefix + str(i)
+        token = f"{prefix}{i}"
         d.add_symbol(token)
     d.finalize(padding_factor=1)  # don't add extra padding symbols
     return d
@@ -62,7 +62,7 @@ class TmpDataset(torch.utils.data.Dataset):
 def fairseq_dataset(tmp_data):
     _, _, _, orig_data = tmp_data
     test_data = TmpDataset(orig_data)
-    length = [len(l) for l in orig_data]
+    length = [len(d) for d in orig_data]
     dict = dummy_dictionary()
     dataset = LanguagePairDataset(
         test_data,
@@ -79,7 +79,7 @@ class TestTokenStorage:
     @pytest.fixture
     def data(self):
         tokens = [list(make_sentence()) for _ in range(10)]
-        lengths = np.array([len(l) for l in tokens])
+        lengths = np.array([len(t) for t in tokens])
         sort_order = np.argsort(lengths, kind="mergesort")[::-1]
         lengths = lengths[sort_order]
         orig_tokens = tokens
