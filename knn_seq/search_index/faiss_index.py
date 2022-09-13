@@ -419,10 +419,22 @@ class FaissIndex(SearchIndex):
             distances (ndarray): top-k distances.
             indices (ndarray): top-k indices.
             idmap (ndarray, optional): if given, maps the ids. (e.g., [3, 5] -> {0: 3, 1: 5})
+
+        Returns:
+            - torch.FloatTensor: top-k scores.
+            - torch.LongTensor: top-k indices.
         """
-        distances_tensor = super().postprocess_search(distances, indices, idmap=idmap)
-        if self.metric == "cos" and (self.is_hnsw and self.is_pq and not self.is_ivf):
-            distances_tensor: torch.FloatTensor = (2 - distances_tensor) / 2
+        if idmap is not None:
+            indices = idmap[indices]
+
+        distances_tensor = torch.FloatTensor(distances)
+        indices_tensor = torch.LongTensor(indices)
+
+        if self.metric == "l2":
+            distances_tensor = distances_tensor.neg()
+        elif (self.is_hnsw and self.is_pq and not self.is_ivf) and self.metric == "cos":
+            # HNSWPQ index does not support IP metric.
+            distances_tensor = (2 - distances_tensor) / 2
         return distances_tensor, indices_tensor
 
     def query(self, querys: ndarray, k: int = 1) -> Tuple[ndarray, ndarray]:

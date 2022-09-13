@@ -2,7 +2,7 @@ import itertools
 import json
 import os
 from dataclasses import asdict
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import pytest
@@ -54,6 +54,22 @@ class TestSearchIndex:
 
         def add(self):
             pass
+
+        def postprocess_search(
+            self,
+            distances: np.ndarray,
+            indices: np.ndarray,
+            idmap: Optional[np.ndarray] = None,
+        ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+            if idmap is not None:
+                indices = idmap[indices]
+
+            distances_tensor = torch.FloatTensor(distances)
+            indices_tensor = torch.LongTensor(indices)
+
+            if self.metric == "l2":
+                distances_tensor = distances_tensor.neg()
+            return distances_tensor, indices_tensor
 
         def query(
             self, querys: np.ndarray, k: int = 1
@@ -121,34 +137,6 @@ class TestSearchIndex:
             )
         else:
             assert np.array_equal(inputs, normalized_vectors)
-
-    @pytest.mark.parametrize(
-        ("idmap", "metric"),
-        itertools.product(
-            [
-                (None, np.array([2, 0, 1])),
-                (np.arange(3), np.array([2, 0, 1])),
-                (np.array([1, 2, 0]), np.array([0, 1, 2])),
-            ],
-            ["l2", "ip", "cos"],
-        ),
-    )
-    def test_postprocess_search(self, idmap, metric):
-        index = TestSearchIndex.SearchIndexMock(
-            object, SearchIndexConfig(metric=metric)
-        )
-        distances = np.random.rand(3, D)
-        indices = np.array([2, 0, 1])
-        mapping, expected_ids = idmap
-        processed_distances, processed_indices = index.postprocess_search(
-            distances, indices, idmap=mapping
-        )
-        assert np.array_equal(np.array(processed_indices), expected_ids)
-
-        if metric == "l2":
-            assert np.allclose(np.array(processed_distances), -distances)
-        else:
-            assert np.allclose(np.array(processed_distances), distances)
 
     @pytest.mark.parametrize(
         ("idmap", "metric"),

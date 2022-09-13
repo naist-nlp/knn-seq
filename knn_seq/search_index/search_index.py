@@ -143,6 +143,7 @@ class SearchIndex(ABC):
             ids (Optional[ndarray]): indices of the index.
         """
 
+    @abstractmethod
     def postprocess_search(
         self, distances: ndarray, indices: ndarray, idmap: Optional[ndarray] = None
     ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
@@ -157,16 +158,6 @@ class SearchIndex(ABC):
             - torch.FloatTensor: top-k scores.
             - torch.LongTensor: top-k indices.
         """
-        if idmap is not None:
-            indices = idmap[indices]
-
-        distances_tensor = torch.FloatTensor(distances)
-        indices_tensor = torch.LongTensor(indices)
-
-        if self.metric == "l2":
-            distances_tensor: torch.FloatTensor = distances_tensor.neg()
-
-        return distances_tensor, indices_tensor
 
     @abstractmethod
     def query(self, querys: ndarray, k: int = 1) -> Tuple[ndarray, ndarray]:
