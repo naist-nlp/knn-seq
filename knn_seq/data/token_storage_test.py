@@ -80,3 +80,15 @@ class TestTokenStorage:
         orig_order = np.zeros_like(sort_order)
         orig_order[sort_order] = np.arange(len(sort_order))
         assert np.array_equal(ts.orig_order, orig_order)
+
+    def test_get_interval(self, data):
+        tokens, lengths, sort_order, _ = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        for i in range(len(lengths)):
+            ds_idx = ts.orig_order[i]
+            assert np.array_equal(
+                ts.get_interval(i),
+                np.arange(
+                    make_offsets(lengths)[ds_idx], make_offsets(lengths)[ds_idx + 1]
+                ),
+            )
