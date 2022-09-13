@@ -3,6 +3,9 @@ from typing import List
 
 import numpy as np
 import pytest
+import torch
+from fairseq.data import Dictionary
+from fairseq.data.language_pair_dataset import LanguagePairDataset
 
 from knn_seq.data.token_storage import TokenStorage, make_offsets
 
@@ -16,6 +19,15 @@ def test_make_offsets():
 def make_sentence():
     length = np.random.randint(10, 50 + 1)  # randint is [x, y)
     return np.random.randint(0, 100, (length,))
+
+
+def dummy_dictionary(vocab_size=100, prefix="token_"):
+    d = Dictionary()
+    for i in range(vocab_size):
+        token = f"{prefix}{i}"
+        d.add_symbol(token)
+    d.finalize(padding_factor=1)  # don't add extra padding symbols
+    return d
 
 
 def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
@@ -34,11 +46,40 @@ def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
     return np.array_equal(orig_list, ts_tokens)
 
 
+class TmpDataset(torch.utils.data.Dataset):
+    def __init__(self, data):
+        super().__init__()
+        self.data = data
+        self.sizes = None
+
+    def __getitem__(self, index):
+        return self.data[index]
+
+    def __len__(self):
+        return len(self.data)
+
+
+def fairseq_dataset(tmp_data):
+    _, _, _, orig_data = tmp_data
+    test_data = TmpDataset(orig_data)
+    length = [len(d) for d in orig_data]
+    dict = dummy_dictionary()
+    dataset = LanguagePairDataset(
+        test_data,
+        length,
+        dict,
+        tgt=test_data,
+        tgt_sizes=length,
+        tgt_dict=dict,
+    )
+    return dataset, tmp_data
+
+
 class TestTokenStorage:
     @pytest.fixture
     def data(self):
         tokens = [list(make_sentence()) for _ in range(10)]
-        lengths = np.array([len(l) for l in tokens])
+        lengths = np.array([len(t) for t in tokens])
         sort_order = np.argsort(lengths, kind="mergesort")[::-1]
         lengths = lengths[sort_order]
         orig_tokens = tokens
@@ -102,3 +143,9 @@ class TestTokenStorage:
         assert np.array_equal(ts.offsets, ts_b.offsets)
         assert np.array_equal(ts.sort_order, ts_b.sort_order)
         assert np.array_equal(ts.orig_order, ts_b.orig_order)
+
+    @pytest.mark.parametrize("target", [True, False])
+    def test_load_from_fairseq_dataset(self, data, target):
+        dataset, (_, _, _, orig_tokens) = fairseq_dataset(data)
+        ts_b = TokenStorage.load_from_fairseq_dataset(dataset, tgt=target)
+        assert invest_match(orig_tokens, ts_b)
