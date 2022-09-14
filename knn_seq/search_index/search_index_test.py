@@ -2,6 +2,7 @@ import itertools
 import json
 import os
 from dataclasses import asdict
+from typing import Optional, Tuple
 
 import numpy as np
 import pytest
@@ -54,8 +55,24 @@ class TestSearchIndex:
         def add(self):
             pass
 
-        def query(self):
-            pass
+        def postprocess_search(
+            self,
+            distances: np.ndarray,
+            indices: np.ndarray,
+            idmap: Optional[np.ndarray] = None,
+        ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+            if idmap is not None:
+                indices = idmap[indices]
+
+            distances_tensor = torch.FloatTensor(distances)
+            indices_tensor = torch.LongTensor(indices)
+
+            return distances_tensor, indices_tensor
+
+        def query(
+            self, querys: np.ndarray, k: int = 1
+        ) -> Tuple[np.ndarray, np.ndarray]:
+            return np.array([0.3, 0.2, 0.1]), np.array([2, 0, 1])
 
         def clear(self):
             pass
@@ -116,6 +133,26 @@ class TestSearchIndex:
             )
         else:
             assert np.array_equal(inputs, normalized_vectors)
+
+    @pytest.mark.parametrize(
+        ("idmap", "metric"),
+        itertools.product(
+            [
+                (None, np.array([2, 0, 1])),
+                (np.arange(3), np.array([2, 0, 1])),
+                (np.array([1, 2, 0]), np.array([0, 1, 2])),
+            ],
+            ["l2", "ip", "cos"],
+        ),
+    )
+    def test_search(self, idmap, metric):
+        index = TestSearchIndex.SearchIndexMock(
+            object, SearchIndexConfig(metric=metric)
+        )
+        querys = np.random.rand(1, D)
+        mapping, expected_ids = idmap
+        distances, indices = index.search(querys, k=3, idmap=mapping)
+        assert np.array_equal(np.array(indices), expected_ids)
 
     def test_save_config(self, tmp_path):
         index_path = tmp_path / "test_index.bin"
