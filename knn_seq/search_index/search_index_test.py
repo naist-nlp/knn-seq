@@ -67,15 +67,11 @@ class TestSearchIndex:
             distances_tensor = torch.FloatTensor(distances)
             indices_tensor = torch.LongTensor(indices)
 
-            if self.metric == "l2":
-                distances_tensor = distances_tensor.neg()
             return distances_tensor, indices_tensor
 
         def query(
             self, querys: np.ndarray, k: int = 1
         ) -> Tuple[np.ndarray, np.ndarray]:
-            if self.metric == "l2":
-                return np.array([0.1, 0.2, 0.3]), np.array([2, 0, 1])
             return np.array([0.3, 0.2, 0.1]), np.array([2, 0, 1])
 
         def clear(self):
@@ -153,7 +149,7 @@ class TestSearchIndex:
         index = TestSearchIndex.SearchIndexMock(
             object, SearchIndexConfig(metric=metric)
         )
-        querys = np.random.rand(3, D)
+        querys = np.random.rand(1, D)
         mapping, expected_ids = idmap
         distances, indices = index.search(querys, k=3, idmap=mapping)
         assert np.array_equal(np.array(indices), expected_ids)
