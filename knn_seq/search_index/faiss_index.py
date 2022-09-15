@@ -5,6 +5,7 @@ import faiss
 import numpy as np
 import torch
 from numpy import ndarray
+from typing_extensions import TypeAlias
 
 from knn_seq.search_index.search_index import SearchIndex, SearchIndexConfig
 
@@ -12,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 # We wrap the faiss types here to prevent errors when running with faiss-cpu
 # faiss-cpu doesn't have faiss.GpuIndex
-Index = faiss.Index
-GpuIndex = faiss.GpuIndex if hasattr(faiss, "GpuIndex") else Index
+GpuIndex: TypeAlias = faiss.GpuIndex if hasattr(faiss, "GpuIndex") else faiss.Index
 
 
 def faiss_index_to_gpu(
@@ -37,17 +37,12 @@ def faiss_index_to_gpu(
     co = faiss.GpuMultipleClonerOptions()
     co.useFloat16 = True
     co.useFloat16CoarseQuantizer = True
+    co.indicesOptions = faiss.INDICES_CPU
     if precompute:
         logger.info(f"Use precompute table on GPU.")
         co.usePrecomputed = precompute
     if reserve_vecs is not None:
         co.reserveVecs = reserve_vecs
-        if reserve_vecs > 2 * 10**9:
-            co.indicesOptions = faiss.INDICES_64_BIT
-        else:
-            co.indicesOptions = faiss.INDICES_32_BIT
-    else:
-        co.indicesOptions = faiss.INDICES_CPU
 
     if shard:
         co.shard = True
