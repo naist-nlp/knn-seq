@@ -8,7 +8,8 @@ import numpy as np
 import torch
 
 
-DATABIN_DIR = os.path.join('data', "data-bin")
+DATABIN_DIR = os.path.join("data", "data-bin")
+
 
 @pytest.fixture(scope="module")
 def testdata_src_dict():
@@ -21,14 +22,15 @@ def testdata_tgt_dict():
     dict_path = os.path.join(DATABIN_DIR, "dict.ja.txt")
     return Dictionary.load(dict_path)
 
+
 @pytest.fixture(scope="module")
 def testdata_samples(testdata_src_dict, testdata_tgt_dict):
-    with open(os.path.join('data', "train.en"), "r") as open_in:
+    with open(os.path.join("data", "train.en"), "r") as open_in:
         src_sents = [
             testdata_src_dict.encode_line(s.strip()) for s in open_in.readlines()
         ]
 
-    with open(os.path.join('data', "train.ja"), "r") as open_in:
+    with open(os.path.join("data", "train.ja"), "r") as open_in:
         tgt_sents = [
             testdata_tgt_dict.encode_line(s.strip()) for s in open_in.readlines()
         ]
@@ -38,13 +40,14 @@ def testdata_samples(testdata_src_dict, testdata_tgt_dict):
         samples.append({"id": i, "source": src_sents[i], "target": tgt_sents[i]})
     return samples
 
+
 class TestLanguagePairDatasetWithRawSentence:
     @pytest.fixture
     def testdata_dataset(self, testdata_src_dict, testdata_tgt_dict):
-        with open(os.path.join('data', "train.en"), "r") as open_in:
+        with open(os.path.join("data", "train.en"), "r") as open_in:
             src_sents = [s.strip() for s in open_in.readlines()]
 
-        with open(os.path.join('data', "train.ja"), "r") as open_in:
+        with open(os.path.join("data", "train.ja"), "r") as open_in:
             tgt_sents = [s.strip() for s in open_in.readlines()]
 
         dataset = load_langpair_dataset(
@@ -83,11 +86,11 @@ class TestLanguagePairDatasetWithRawSentence:
             testdata_dataset.tgt_sizes[:10],
             np.array([9, 6, 8, 7, 9, 9, 8, 5, 6, 8]),
         )
-        
-        with open(os.path.join('data', "train.en"), "r") as open_in:
+
+        with open(os.path.join("data", "train.en"), "r") as open_in:
             src_sents = [s.strip() for s in open_in.readlines()]
 
-        with open(os.path.join('data', "train.ja"), "r") as open_in:
+        with open(os.path.join("data", "train.ja"), "r") as open_in:
             tgt_sents = [s.strip() for s in open_in.readlines()]
 
         assert testdata_dataset.src_sents == src_sents
@@ -95,18 +98,16 @@ class TestLanguagePairDatasetWithRawSentence:
 
     @pytest.mark.parametrize(
         ("pad_to_length"),
-        [
-            None, 
-            {"source": 1, "target": 1}, 
-            {"source": 10, "target": 6}
-        ],
-    ) 
+        [None, {"source": 1, "target": 1}, {"source": 10, "target": 6}],
+    )
     def test_collater(self, testdata_dataset, testdata_samples, pad_to_length):
-        collator = testdata_dataset.collater(testdata_samples, pad_to_length=pad_to_length)
+        collator = testdata_dataset.collater(
+            testdata_samples, pad_to_length=pad_to_length
+        )
         assert torch.equal(collator["id"], torch.tensor([4, 6, 8, 5, 7, 1, 2, 3, 9, 0]))
         assert collator["ntokens"] == sum([3, 4, 4, 4, 8, 5, 6, 5, 6, 4])
-        
-        if not pad_to_length or pad_to_length['source'] < 10:
+
+        if not pad_to_length or pad_to_length["source"] < 10:
             expected_src = torch.tensor(
                 [
                     [138, 26, 139, 140, 141, 140, 142, 121, 2],
@@ -122,7 +123,7 @@ class TestLanguagePairDatasetWithRawSentence:
                 ],
                 dtype=torch.int32,
             )
-        elif pad_to_length['source'] == 10:
+        elif pad_to_length["source"] == 10:
             expected_src = torch.tensor(
                 [
                     [138, 26, 139, 140, 141, 140, 142, 121, 2, 1],
@@ -144,7 +145,7 @@ class TestLanguagePairDatasetWithRawSentence:
             torch.tensor([9, 7, 7, 6, 6, 5, 5, 5, 5, 4]),
         )
 
-        if not pad_to_length or pad_to_length['target'] < 5:
+        if not pad_to_length or pad_to_length["target"] < 5:
             expected_tgt = torch.tensor(
                 [
                     [937, 938, 939, 930, 2],
@@ -175,7 +176,7 @@ class TestLanguagePairDatasetWithRawSentence:
                 ],
                 dtype=torch.int32,
             )
-        elif pad_to_length['target'] == 6:
+        elif pad_to_length["target"] == 6:
             expected_tgt = torch.tensor(
                 [
                     [937, 938, 939, 930, 2, 1],
