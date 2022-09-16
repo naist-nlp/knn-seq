@@ -119,7 +119,7 @@ class TestSearchIndex:
         assert index.use_pca == use_pca
 
     @pytest.mark.parametrize(
-        ("vectors"),
+        "vectors",
         [
             torch.rand(N, D, dtype=torch.float32),
             torch.rand(N, D, dtype=torch.float16),
