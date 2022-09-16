@@ -26,7 +26,7 @@ def is_gpu_index(index):
 
 
 @pytest.mark.parametrize(
-    ("index"),
+    "index",
     [
         faiss.IndexFlatL2(D),
         faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
@@ -63,7 +63,7 @@ def test_faiss_index_to_gpu(index):
 
 
 @pytest.mark.parametrize(
-    ("index"),
+    "index",
     [
         faiss.IndexFlatL2(D),
         faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
