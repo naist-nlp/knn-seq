@@ -24,56 +24,68 @@ def testdata_tgt_dict():
 
 
 @pytest.fixture(scope="module")
-def testdata_samples(testdata_src_dict, testdata_tgt_dict):
+def testdata_src_sents():
     with open(os.path.join("data", "train.en"), "r") as open_in:
-        src_sents = [
-            testdata_src_dict.encode_line(s.strip()) for s in open_in.readlines()
-        ]
+        src_sents = [s.strip() for s in open_in.readlines()]
+    return src_sents
 
+
+@pytest.fixture(scope="module")
+def testdata_tgt_sents():
     with open(os.path.join("data", "train.ja"), "r") as open_in:
-        tgt_sents = [
-            testdata_tgt_dict.encode_line(s.strip()) for s in open_in.readlines()
-        ]
+        tgt_sents = [s.strip() for s in open_in.readlines()]
+    return tgt_sents
 
-    samples = []
-    for i in range(10):
-        samples.append({"id": i, "source": src_sents[i], "target": tgt_sents[i]})
+
+@pytest.fixture(scope="module")
+def testdata_samples(
+    testdata_src_dict, testdata_tgt_dict, testdata_src_sents, testdata_tgt_sents
+):
+    samples = [
+        {
+            "id": i,
+            "source": testdata_src_dict.encode_line(src),
+            "target": testdata_tgt_dict.encode_line(tgt),
+        }
+        for i, (src, tgt) in enumerate(zip(testdata_src_sents, testdata_tgt_sents))
+    ]
     return samples
+
+
+@pytest.fixture(scope="module")
+def testdata_langpair_dataset(testdata_src_dict, testdata_tgt_dict):
+    return load_langpair_dataset(
+        DATABIN_DIR,
+        "train",
+        "en",
+        testdata_src_dict,
+        "ja",
+        testdata_tgt_dict,
+        combine=True,
+        dataset_impl="mmap",
+        upsample_primary=-1,
+        left_pad_source=False,
+        left_pad_target=False,
+        max_source_positions=1024,
+        max_target_positions=1024,
+        load_alignments=False,
+        truncate_source=False,
+        num_buckets=0,
+        shuffle=True,
+        pad_to_multiple=1,
+    )
 
 
 class TestLanguagePairDatasetWithRawSentence:
     @pytest.fixture
-    def testdata_dataset(self, testdata_src_dict, testdata_tgt_dict):
-        with open(os.path.join("data", "train.en"), "r") as open_in:
-            src_sents = [s.strip() for s in open_in.readlines()]
-
-        with open(os.path.join("data", "train.ja"), "r") as open_in:
-            tgt_sents = [s.strip() for s in open_in.readlines()]
-
-        dataset = load_langpair_dataset(
-            DATABIN_DIR,
-            "train",
-            "en",
-            testdata_src_dict,
-            "ja",
-            testdata_tgt_dict,
-            combine=True,
-            dataset_impl="mmap",
-            upsample_primary=-1,
-            left_pad_source=False,
-            left_pad_target=False,
-            max_source_positions=1024,
-            max_target_positions=1024,
-            load_alignments=False,
-            truncate_source=False,
-            num_buckets=0,
-            shuffle=True,
-            pad_to_multiple=1,
+    def testdata_dataset(
+        self, testdata_langpair_dataset, testdata_src_sents, testdata_tgt_sents
+    ):
+        return LanguagePairDatasetWithRawSentence(
+            testdata_langpair_dataset,
+            src_sents=testdata_src_sents,
+            tgt_sents=testdata_tgt_sents,
         )
-        language_pair_dataset = LanguagePairDatasetWithRawSentence(
-            dataset, src_sents=src_sents, tgt_sents=tgt_sents
-        )
-        return language_pair_dataset
 
     def test_dataset_init(self, testdata_dataset, testdata_src_dict, testdata_tgt_dict):
         assert testdata_dataset.src_dict == testdata_src_dict
@@ -97,7 +109,7 @@ class TestLanguagePairDatasetWithRawSentence:
         assert testdata_dataset.tgt_sents == tgt_sents
 
     @pytest.mark.parametrize(
-        ("pad_to_length"),
+        "pad_to_length",
         [None, {"source": 1, "target": 1}, {"source": 10, "target": 6}],
     )
     def test_collater(self, testdata_dataset, testdata_samples, pad_to_length):
@@ -107,7 +119,7 @@ class TestLanguagePairDatasetWithRawSentence:
         assert torch.equal(collator["id"], torch.tensor([4, 6, 8, 5, 7, 1, 2, 3, 9, 0]))
         assert collator["ntokens"] == sum([3, 4, 4, 4, 8, 5, 6, 5, 6, 4])
 
-        if not pad_to_length or pad_to_length["source"] < 10:
+        if pad_to_length is None or pad_to_length["source"] < 10:
             expected_src = torch.tensor(
                 [
                     [138, 26, 139, 140, 141, 140, 142, 121, 2],
@@ -145,7 +157,7 @@ class TestLanguagePairDatasetWithRawSentence:
             torch.tensor([9, 7, 7, 6, 6, 5, 5, 5, 5, 4]),
         )
 
-        if not pad_to_length or pad_to_length["target"] < 5:
+        if pad_to_length is None or pad_to_length["target"] < 5:
             expected_tgt = torch.tensor(
                 [
                     [937, 938, 939, 930, 2],
