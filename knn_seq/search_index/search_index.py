@@ -53,8 +53,8 @@ class SearchIndex(ABC):
         self.config = config
         self.backend = config.backend
         self.metric = config.metric
-        self.use_ivf = config.ivf_lists > 0
         self.use_hnsw = config.hnsw_edges > 0
+        self.use_ivf = config.ivf_lists > 0
         self.use_pq = config.pq_subvec > 0
         self.use_opq = config.use_opq
         self.use_pca = config.use_pca

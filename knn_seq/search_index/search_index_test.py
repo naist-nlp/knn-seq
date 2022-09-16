@@ -2,7 +2,7 @@ import itertools
 import json
 import os
 from dataclasses import asdict
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import numpy as np
 import pytest
@@ -83,6 +83,40 @@ class TestSearchIndex:
 
         def save_index(self, path):
             pass
+
+    @pytest.mark.parametrize("metric", ["l2", "ip", "cos"])
+    @pytest.mark.parametrize("hnsw_edges", [-1, 0, 4])
+    @pytest.mark.parametrize("ivf_lists", [-1, 0, 4])
+    @pytest.mark.parametrize("pq_subvec", [-1, 0, 2])
+    @pytest.mark.parametrize("use_opq", [False, True])
+    @pytest.mark.parametrize("use_pca", [False, True])
+    def test___init__(
+        self,
+        metric: Literal["l2", "ip", "cos"],
+        hnsw_edges: int,
+        ivf_lists: int,
+        pq_subvec: int,
+        use_opq: bool,
+        use_pca: bool,
+    ):
+        cfg = SearchIndexConfig(
+            metric=metric,
+            hnsw_edges=hnsw_edges,
+            ivf_lists=ivf_lists,
+            pq_subvec=pq_subvec,
+            use_opq=use_opq,
+            use_pca=use_pca,
+        )
+        index = TestSearchIndex.SearchIndexMock(object, cfg)
+
+        assert cfg == index.config
+        assert cfg.backend == index.backend
+        assert index.metric == metric
+        assert index.use_hnsw == (hnsw_edges > 0)
+        assert index.use_ivf == (ivf_lists > 0)
+        assert index.use_pq == (pq_subvec > 0)
+        assert index.use_opq == use_opq
+        assert index.use_pca == use_pca
 
     @pytest.mark.parametrize(
         ("vectors"),
