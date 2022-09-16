@@ -136,17 +136,15 @@ class TestSearchIndex:
         assert np.array_equal(np.array(vectors).astype(np.float32), ndarray)
 
     @pytest.mark.parametrize(
-        ("vectors", "metric"),
-        itertools.product(
-            [
-                torch.rand(N, D, dtype=torch.float32),
-                torch.rand(N, D, dtype=torch.float16),
-                np.random.rand(N, D).astype(np.float32),
-                np.random.rand(N, D).astype(np.float16),
-            ],
-            ["l2", "ip", "cos"],
-        ),
+        "vectors",
+        [
+            torch.rand(N, D, dtype=torch.float32),
+            torch.rand(N, D, dtype=torch.float16),
+            np.random.rand(N, D).astype(np.float32),
+            np.random.rand(N, D).astype(np.float16),
+        ],
     )
+    @pytest.mark.parametrize("metric", ["l2", "ip", "cos"])
     def test_normalize(self, vectors, metric):
         index = TestSearchIndex.SearchIndexMock(
             object, SearchIndexConfig(metric=metric)
@@ -169,23 +167,21 @@ class TestSearchIndex:
             assert np.array_equal(inputs, normalized_vectors)
 
     @pytest.mark.parametrize(
-        ("idmap", "metric"),
-        itertools.product(
-            [
-                (None, np.array([2, 0, 1])),
-                (np.arange(3), np.array([2, 0, 1])),
-                (np.array([1, 2, 0]), np.array([0, 1, 2])),
-            ],
-            ["l2", "ip", "cos"],
-        ),
+        "idmap",
+        [
+            (None, np.array([2, 0, 1])),
+            (np.arange(3), np.array([2, 0, 1])),
+            (np.array([1, 2, 0]), np.array([0, 1, 2])),
+        ],
     )
+    @pytest.mark.parametrize("metric", ["l2", "ip", "cos"])
     def test_search(self, idmap, metric):
         index = TestSearchIndex.SearchIndexMock(
             object, SearchIndexConfig(metric=metric)
         )
         querys = np.random.rand(1, D)
         mapping, expected_ids = idmap
-        distances, indices = index.search(querys, k=3, idmap=mapping)
+        _, indices = index.search(querys, k=3, idmap=mapping)
         assert np.array_equal(np.array(indices), expected_ids)
 
     def test_save_config(self, tmp_path):
