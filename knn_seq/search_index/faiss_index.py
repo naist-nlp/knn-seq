@@ -78,10 +78,6 @@ class FaissIndex(SearchIndex):
         "cos": faiss.METRIC_INNER_PRODUCT,
     }
 
-    def __init__(self, index: faiss.Index, config: SearchIndexConfig) -> None:
-        super().__init__(index, config)
-        self.use_gpu = False
-
     def __len__(self) -> int:
         return self.index.ntotal
 
@@ -91,11 +87,11 @@ class FaissIndex(SearchIndex):
         return faiss.ParameterSpace().set_index_parameter(self.index, name, param)
 
     def set_nprobe(self, nprobe: int):
-        if self.is_ivf:
+        if self.use_ivf:
             self.set_param("nprobe", nprobe)
 
     def set_efsearch(self, efsearch: int):
-        if self.is_hnsw:
+        if self.use_hnsw:
             self.set_param("efSearch", efsearch)
 
     @property
@@ -105,7 +101,7 @@ class FaissIndex(SearchIndex):
 
     @property
     def ivf(self) -> Optional[faiss.IndexIVF]:
-        if not self.is_ivf:
+        if not self.use_ivf:
             return None
         return faiss.extract_index_ivf(self.index)
 
@@ -184,14 +180,14 @@ class FaissIndex(SearchIndex):
     def to_gpu(self) -> None:
         """Transfers the faiss index to GPUs."""
         if not self.is_trained:
-            if self.is_pq:
-                index = self.index.index if self.is_opq or self.is_pca else self.index
+            if self.use_pq:
+                index = self.index.index if self.use_opq or self.use_pca else self.index
                 pq = faiss.downcast_index(index).pq
                 assign_index = faiss_index_to_gpu(
                     faiss.IndexFlatL2(pq.dsub), num_gpus=1
                 )
                 pq.assign_index = assign_index
-                if self.is_opq:
+                if self.use_opq:
                     opq = faiss.downcast_VectorTransform(self.index.chain.at(0))
                     opq.pq = pq
 
@@ -210,7 +206,7 @@ class FaissIndex(SearchIndex):
                 ivf.clustering_index = clustering_index
                 self.use_gpu = True
         else:
-            if self.is_ivf or self.is_pq:
+            if self.use_ivf or self.use_pq:
                 self.use_gpu = True
 
     def to_cpu(self) -> None:
@@ -242,7 +238,7 @@ class FaissIndex(SearchIndex):
         index: Union[faiss.IndexIVF, faiss.IndexPreTransform],
         direct_map_type: faiss.DirectMap,
     ):
-        if self.is_ivf:
+        if self.use_ivf:
             faiss.extract_index_ivf(index).set_direct_map_type(direct_map_type)
 
     @property
@@ -250,7 +246,7 @@ class FaissIndex(SearchIndex):
         if not hasattr(self, "_gpu_quantizer"):
             ivf: faiss.IndexIVF = faiss.extract_index_ivf(self.index)
             quantizer = ivf.quantizer
-            if self.is_hnsw:
+            if self.use_hnsw:
                 cq = faiss.downcast_index(faiss.downcast_index(quantizer).storage)
             else:
                 cq = faiss.downcast_index(quantizer)
@@ -275,7 +271,7 @@ class FaissIndex(SearchIndex):
         Returns:
             np.array: pre-transformed vectors of shape `(n, D)`.
         """
-        if not (self.is_opq or self.is_pca):
+        if not (self.use_opq or self.use_pca):
             return x
 
         if not hasattr(self, "A") or not hasattr(self, "b"):
@@ -338,18 +334,18 @@ class FaissIndex(SearchIndex):
             ivf_index.verbose = False
             ivf_index.add_core(nb, faiss.swig_ptr(xb), None, faiss.swig_ptr(assign))
             ivf_index.verbose = True
-            if self.is_opq or self.is_pca:
+            if self.use_opq or self.use_pca:
                 self.index.ntotal = ivf_index.ntotal
             return
 
         if getattr(self, "_gpu_ivf", None) is None:
-            if self.is_hnsw:
+            if self.use_hnsw:
                 hnsw_quantizer = faiss.downcast_index(ivf_index.quantizer)
                 ivf_index.quantizer = faiss.downcast_index(hnsw_quantizer.storage)
             self._gpu_ivf = faiss_index_to_gpu(
                 ivf_index, reserve_vecs=xb.shape[0], shard=True, precompute=True
             )
-            if self.is_hnsw:
+            if self.use_hnsw:
                 ivf_index.quantizer = hnsw_quantizer
             self._gpu_ivf.reset()
             self.use_gpu = True
@@ -361,7 +357,7 @@ class FaissIndex(SearchIndex):
         cpu_ivf: faiss.IndexIVF = faiss_index_to_cpu(self._gpu_ivf)
         assert cpu_ivf.ntotal == xb.shape[0]
         faiss.extract_index_ivf(cpu_ivf).copy_subset_to(ivf_index, 0, a0, a1)
-        if self.is_opq or self.is_pca:
+        if self.use_opq or self.use_pca:
             self.index.ntotal = ivf_index.ntotal
         logger.info(f"Copied GPU-to-CPU: [{a0}, {a1})")
         self._gpu_ivf.reset()
@@ -370,13 +366,13 @@ class FaissIndex(SearchIndex):
         logger.info(f"Rotate vectors: {xb.shape}")
         xb = self.rotate(xb, use_gpu=True, fp16=True)
         index = self.index
-        if self.is_opq or self.is_pca:
+        if self.use_opq or self.use_pca:
             index = faiss.downcast_index(self.index.index)
         assert isinstance(index, faiss.IndexPQ)
 
         logger.info(f"Add vectors")
         index.add(xb)
-        if self.is_opq or self.is_pca:
+        if self.use_opq or self.use_pca:
             self.index.ntotal = index.ntotal
         return
 
@@ -390,15 +386,15 @@ class FaissIndex(SearchIndex):
 
         vectors = self.normalize(vectors)
         if self.use_gpu:
-            if self.is_ivf:
+            if self.use_ivf:
                 return self.add_ivf_gpu(vectors)
-            if self.is_pq:
+            if self.use_pq:
                 return self.add_pq_gpu(vectors)
         return self.index.add(vectors)
 
     def ivf_to_gpu(self):
         ivf_index: faiss.IndexIVF = self.ivf
-        if self.is_hnsw:
+        if self.use_hnsw:
             ivf_index.quantizer = faiss.downcast_index(
                 faiss.downcast_index(ivf_index.quantizer).storage
             )
@@ -427,7 +423,9 @@ class FaissIndex(SearchIndex):
 
         if self.metric == "l2":
             distances_tensor = distances_tensor.neg()
-        elif (self.is_hnsw and self.is_pq and not self.is_ivf) and self.metric == "cos":
+        elif (
+            self.use_hnsw and self.use_pq and not self.use_ivf
+        ) and self.metric == "cos":
             # HNSWPQ index does not support IP metric.
             distances_tensor = (2 - distances_tensor) / 2
         return distances_tensor, indices_tensor
@@ -471,7 +469,7 @@ class FaissIndex(SearchIndex):
         Args:
             path (str): index file path to save.
         """
-        if self.use_gpu and not self.is_ivf:
+        if self.use_gpu and not self.use_ivf:
             self.to_cpu()
             faiss.write_index(self.index, path)
             self.to_gpu()
