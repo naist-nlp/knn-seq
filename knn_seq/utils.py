@@ -26,6 +26,9 @@ def buffer_lines(lines: Iterable, buffer_size: int = 10000) -> Iterator[List[str
     Yields:
         List[str]: buffered lines.
     """
+    if buffer_size <= 0:
+        raise ValueError("buffer_size must be at least 1")
+
     buffer = []
     for line in lines:
         buffer.append(line)
@@ -121,11 +124,11 @@ def to_device(item: Any, use_gpu: bool = True) -> Any:
             return item.cuda()
         return item.cpu()
     elif isinstance(item, (dict, UserDict)):
-        return item_type({k: to_device(v) for k, v in item.items()})
+        return item_type({k: to_device(v, use_gpu=use_gpu) for k, v in item.items()})
     elif isinstance(item, (list, UserList)):
-        return item_type([to_device(x) for x in item])
+        return item_type([to_device(x, use_gpu=use_gpu) for x in item])
     else:
-        return item_type(item)
+        return item
 
 
 def softmax(scores: Tensor):

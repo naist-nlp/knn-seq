@@ -1,6 +1,7 @@
 from itertools import chain
 from typing import List
 
+import h5py
 import numpy as np
 import pytest
 import torch
@@ -149,3 +150,45 @@ class TestTokenStorage:
         dataset, (_, _, _, orig_tokens) = fairseq_dataset(data)
         ts_b = TokenStorage.load_from_fairseq_dataset(dataset, tgt=target)
         assert invest_match(orig_tokens, ts_b)
+
+    def test_save(self, data, tmp_path):
+        tokens, lengths, sort_order, _ = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        ts.save(tmp_path)
+        with h5py.File(tmp_path / "values.bin", mode="r") as f:
+            assert np.array_equal(tokens, f["tokens"][()])
+            assert np.array_equal(lengths, f["lengths"][()])
+            assert np.array_equal(sort_order, f["sort_order"][()])
+
+    def test_load(self, data, tmp_path):
+        tokens, lengths, sort_order, _ = data
+        ts = TokenStorage(tokens, lengths, sort_order)
+        ts.save(tmp_path)
+        ts_b = TokenStorage.load(tmp_path)
+        assert np.array_equal(ts.tokens, ts_b.tokens)
+        assert np.array_equal(ts.lengths, ts_b.lengths)
+        assert np.array_equal(ts.offsets, ts_b.offsets)
+        assert np.array_equal(ts.sort_order, ts_b.sort_order)
+        assert np.array_equal(ts.orig_order, ts_b.orig_order)
+
+    @pytest.fixture
+    def create_path(self, tmp_path_factory):
+        save_dir = tmp_path_factory.mktemp("save")
+        other_dir = tmp_path_factory.mktemp("other")
+        return save_dir, other_dir
+
+    def test_merge(self, data, create_path):
+        tokens, lengths, sort_order, orig_tokens = data
+        save_dir, other_dir = create_path
+        ts = TokenStorage(tokens, lengths, sort_order)
+        ts.save(other_dir)
+        ts.merge(save_dir, other_dir)
+        with h5py.File(save_dir / "values.bin", mode="r") as f:
+            assert np.array_equal(np.concatenate([tokens, tokens]), f["tokens"][()])
+            assert np.array_equal(np.concatenate([lengths, lengths]), f["lengths"][()])
+            assert np.array_equal(
+                np.concatenate([sort_order, sort_order + len(sort_order)]),
+                f["sort_order"][()],
+            )
+        ts_b = TokenStorage.load(save_dir)
+        assert invest_match(orig_tokens * 2, ts_b)
