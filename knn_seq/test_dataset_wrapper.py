@@ -276,6 +276,68 @@ class TestLanguagePairDatasetWithOriginalOrder:
             expected_collator["target"]
         )
 
+    @pytest.mark.parametrize(
+        "pad_to_length",
+        [None, {"source": 1, "target": 1}, {"source": 35, "target": 30}],
+    )
+    def test_nesting(self, testdata_langpair_dataset, testdata_src_sents, testdata_tgt_sents, pad_to_length, expected_src, expected_tgt, expected_prev_out):
+        nested_dataset = LanguagePairDatasetWithOriginalOrder(
+            LanguagePairDatasetWithRawSentence(
+                testdata_langpair_dataset,
+                src_sents=testdata_src_sents,
+                tgt_sents=testdata_tgt_sents,
+            )
+        )
+
+        collator = nested_dataset.collater(
+            [testdata_langpair_dataset[i] for i in range(10)], pad_to_length=pad_to_length
+        )
+
+        assert torch.equal(collator["id"], torch.tensor([6, 3, 2, 7, 5, 4, 1, 0, 9, 8]))
+        assert collator["ntokens"] == 157
+
+        if pad_to_length is None or pad_to_length["source"] < 27:
+            assert torch.equal(collator["net_input"]["src_tokens"], expected_src)
+        else:
+            expected_src_padded = pad(expected_src, pad_to_length["source"], nested_dataset.src_dict.pad())
+            assert torch.equal(collator["net_input"]["src_tokens"], expected_src_padded)
+
+        assert torch.equal(
+            collator["net_input"]["src_lengths"],
+            torch.tensor([27, 26, 23, 20, 18, 17, 16, 14, 13, 11]),
+        )
+
+        if pad_to_length is None or pad_to_length["target"] < 27:
+            assert torch.equal(collator["target"], expected_tgt)
+            assert torch.equal(collator["net_input"]["prev_output_tokens"], expected_prev_out)
+        else:
+            expected_tgt_padded = pad(expected_tgt, pad_to_length['target'], nested_dataset.src_dict.pad())
+            assert torch.equal(collator["target"], expected_tgt_padded)
+            expected_prev_out_padded = pad(expected_prev_out, pad_to_length['target'], nested_dataset.src_dict.pad())
+            assert torch.equal(collator["net_input"]["prev_output_tokens"], expected_prev_out_padded)
+
+        assert torch.equal(
+            collator["orig_order"], torch.tensor([7, 6, 2, 1, 5, 4, 0, 3, 9, 8])
+        )
+
+        expected_collator = collate([testdata_langpair_dataset[i] for i in range(10)], nested_dataset.src_dict, pad_to_length=pad_to_length)
+
+        assert torch.equal(
+            collator["net_input"]["src_tokens"].index_select(0, collator['orig_order']),
+            expected_collator["net_input"]["src_tokens"]
+        )
+        assert torch.equal(
+            collator["net_input"]["prev_output_tokens"].index_select(0, collator['orig_order']),
+            expected_collator["net_input"]["prev_output_tokens"]
+        )
+        assert torch.equal(
+            collator["target"].index_select(0, collator['orig_order']),
+            expected_collator["target"]
+        )
+
+        assert collator["src_sents"] == [testdata_src_sents[i.item()] for i in collator["id"]]
+        assert collator["tgt_sents"] == [testdata_tgt_sents[i.item()] for i in collator["id"]]
+
 def collate(
     samples,
     src_dict,
