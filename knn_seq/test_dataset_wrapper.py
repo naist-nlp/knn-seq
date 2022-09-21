@@ -6,7 +6,7 @@ from knn_seq.dataset_wrapper import (
 import pytest
 import os
 from fairseq.tasks.translation import load_langpair_dataset
-from fairseq.data import Dictionary
+from fairseq.data import Dictionary, data_utils
 import numpy as np
 import torch
 
@@ -63,7 +63,6 @@ def testdata_langpair_dataset(testdata_src_dict, testdata_tgt_dict):
     )
 
 def pad(tensor_to_pad, pad_length, pad_value=1):
-    print(tensor_to_pad.shape[-1])
     num_to_add = pad_length - tensor_to_pad.shape[-1]
     return torch.nn.functional.pad(tensor_to_pad, (0, num_to_add), value=pad_value)
 
@@ -189,7 +188,7 @@ class TestLanguagePairDatasetWithRawSentence:
         if pad_to_length is None or pad_to_length["source"] < 27:
             assert torch.equal(collator["net_input"]["src_tokens"], expected_src)
         else:
-            expected_src_padded = pad(expected_src, pad_to_length["source"]) #grab padding token from dict
+            expected_src_padded = pad(expected_src, pad_to_length["source"], testdata_dataset.src_dict.pad())
             assert torch.equal(collator["net_input"]["src_tokens"], expected_src_padded)
 
         assert torch.equal(
@@ -201,9 +200,9 @@ class TestLanguagePairDatasetWithRawSentence:
             assert torch.equal(collator["target"], expected_tgt)
             assert torch.equal(collator["net_input"]["prev_output_tokens"], expected_prev_out)
         else:
-            expected_tgt_padded = pad(expected_tgt, pad_to_length['target'])
+            expected_tgt_padded = pad(expected_tgt, pad_to_length['target'], testdata_dataset.src_dict.pad())
             assert torch.equal(collator["target"], expected_tgt_padded)
-            expected_prev_out_padded = pad(expected_prev_out, pad_to_length['target'])
+            expected_prev_out_padded = pad(expected_prev_out, pad_to_length['target'], testdata_dataset.src_dict.pad())
             assert torch.equal(collator["net_input"]["prev_output_tokens"], expected_prev_out_padded)
             
         assert collator["src_sents"] == [testdata_src_sents[i.item()] for i in collator["id"]]
@@ -241,7 +240,7 @@ class TestLanguagePairDatasetWithOriginalOrder:
         if pad_to_length is None or pad_to_length["source"] < 27:
             assert torch.equal(collator["net_input"]["src_tokens"], expected_src)
         else:
-            expected_src_padded = pad(expected_src, pad_to_length["source"])
+            expected_src_padded = pad(expected_src, pad_to_length["source"], testdata_dataset.src_dict.pad())
             assert torch.equal(collator["net_input"]["src_tokens"], expected_src_padded)
 
         assert torch.equal(
@@ -253,12 +252,74 @@ class TestLanguagePairDatasetWithOriginalOrder:
             assert torch.equal(collator["target"], expected_tgt)
             assert torch.equal(collator["net_input"]["prev_output_tokens"], expected_prev_out)
         else:
-            expected_tgt_padded = pad(expected_tgt, pad_to_length['target'])
+            expected_tgt_padded = pad(expected_tgt, pad_to_length['target'], testdata_dataset.src_dict.pad())
             assert torch.equal(collator["target"], expected_tgt_padded)
-            expected_prev_out_padded = pad(expected_prev_out, pad_to_length['target'])
+            expected_prev_out_padded = pad(expected_prev_out, pad_to_length['target'], testdata_dataset.src_dict.pad())
             assert torch.equal(collator["net_input"]["prev_output_tokens"], expected_prev_out_padded)
 
         assert torch.equal(
             collator["orig_order"], torch.tensor([7, 6, 2, 1, 5, 4, 0, 3, 9, 8])
         )
+
+        expected_collator = collate([testdata_dataset[i] for i in range(10)], testdata_dataset.src_dict, pad_to_length=pad_to_length)
+
+        assert torch.equal(
+            collator["net_input"]["src_tokens"].index_select(0, collator['orig_order']),
+            expected_collator["net_input"]["src_tokens"]
+        )
+        assert torch.equal(
+            collator["net_input"]["prev_output_tokens"].index_select(0, collator['orig_order']),
+            expected_collator["net_input"]["prev_output_tokens"]
+        )
+        assert torch.equal(
+            collator["target"].index_select(0, collator['orig_order']),
+            expected_collator["target"]
+        )
         
+        testdata_dataset.ordered_indices()
+        #test nesting: LanguagePairWithOriginalOrder(LanguagePairWithRawSentences(langpair_dataet))?
+
+def collate(
+    samples,
+    src_dict,
+    pad_to_length=None,
+):
+    if len(samples) == 0:
+        return {}
+
+    if pad_to_length == None:
+        pad_to_length = {"source": None, "target": None}
+
+    def merge(key, move_eos_to_beginning=False, pad_to_length=None):
+        return data_utils.collate_tokens(
+            [s[key] for s in samples],
+            src_dict.pad(),
+            src_dict.eos(),
+            False,
+            move_eos_to_beginning,
+            pad_to_length=pad_to_length,
+        )
+
+    src_tokens = merge(
+        "source",
+        pad_to_length=pad_to_length["source"]
+    )
+    target = merge(
+        "target",
+        pad_to_length=pad_to_length["target"]
+    )
+    prev_output_tokens = merge(
+        "target",
+        move_eos_to_beginning=True,
+        pad_to_length=pad_to_length["target"]
+    )
+
+    batch = {
+        "net_input": {
+            "src_tokens": src_tokens,
+            "prev_output_tokens": prev_output_tokens,
+        },
+        "target": target,
+    }
+
+    return batch
