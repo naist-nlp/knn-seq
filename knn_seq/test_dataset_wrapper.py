@@ -275,9 +275,6 @@ class TestLanguagePairDatasetWithOriginalOrder:
             collator["target"].index_select(0, collator['orig_order']),
             expected_collator["target"]
         )
-        
-        testdata_dataset.ordered_indices()
-        #test nesting: LanguagePairWithOriginalOrder(LanguagePairWithRawSentences(langpair_dataet))?
 
 def collate(
     samples,
