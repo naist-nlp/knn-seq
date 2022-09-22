@@ -10,6 +10,7 @@ from knn_seq.search_index.faiss_index import (
     faiss_index_to_cpu,
     faiss_index_to_gpu,
 )
+from knn_seq.search_index.search_index import SearchIndexConfig
 
 N = 3
 D = 8
@@ -95,6 +96,52 @@ def test_faiss_index_to_cpu(index):
 
 class TestFaissIndex:
     @pytest.mark.parametrize(
+        "index",
+        [
+            faiss.IndexFlatL2(D),
+            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
+            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
+        ],
+    )
+    def test___len__(self, index):
+        faiss_index = FaissIndex(index, SearchIndexConfig())
+        assert len(faiss_index) == 0
+
+        index.train(np.zeros((256, D), dtype=np.float32))
+
+        index.add(np.zeros((N, D), dtype=np.float32))
+        assert len(faiss_index) == N
+        index.add(np.zeros((N, D), dtype=np.float32))
+        assert len(faiss_index) == 2 * N
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            faiss.IndexFlatL2(D),
+            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
+            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
+        ],
+    )
+    def test_dim(self, index):
+        faiss_index = FaissIndex(index, SearchIndexConfig())
+        assert faiss_index.dim == D
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            faiss.IndexFlatL2(D),
+            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
+            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
+        ],
+    )
+    def test_is_trained(self, index):
+        faiss_index = FaissIndex(index, SearchIndexConfig())
+        assert faiss_index.is_trained == index.is_trained
+
+        index.train(np.zeros((256, D), dtype=np.float32))
+        assert faiss_index.is_trained == index.is_trained
+
+    @pytest.mark.parametrize(
         ("idmap", "metric"),
         itertools.product(
             [
@@ -119,3 +166,35 @@ class TestFaissIndex:
             assert np.allclose(np.array(processed_distances), -distances)
         else:
             assert np.allclose(np.array(processed_distances), distances)
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            faiss.IndexFlatL2(D),
+            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
+            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
+        ],
+    )
+    def test_clear(self, index):
+        faiss_index = FaissIndex(index, SearchIndexConfig())
+        index.train(np.zeros((256, D), dtype=np.float32))
+        index.add(np.zeros((N, D), dtype=np.float32))
+        assert len(faiss_index) == N
+        faiss_index.clear()
+        assert len(faiss_index) == index.ntotal == 0
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            faiss.IndexFlatL2(D),
+            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
+            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
+        ],
+    )
+    def test_reset(self, index):
+        faiss_index = FaissIndex(index, SearchIndexConfig())
+        index.train(np.zeros((256, D), dtype=np.float32))
+        index.add(np.zeros((N, D), dtype=np.float32))
+        assert len(faiss_index) == N
+        faiss_index.reset()
+        assert len(faiss_index) == index.ntotal == 0
