@@ -1,13 +1,9 @@
-from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 import pytest
 import torch
-
-from fairseq.models.transformer import (
-    TransformerDecoderBase,
-    TransformerEncoderBase,
-)
-
 from fairseq.data.base_wrapper_dataset import BaseWrapperDataset
+from fairseq.models.transformer import TransformerDecoderBase, TransformerEncoderBase
+
+from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 
 
 class TestKNNTransformer:
@@ -23,26 +19,19 @@ class TestKNNTransformer:
         elif key == "ffn_out":
             assert new_model.use_ffn_input == False
 
-    @pytest.mark.parametrize(
-        ("key", "features_only", "alignment_layer", "alignment_heads"),
-        [   
-            ("ffn_in", True, 0, None), 
-            ("ffn_out", True, 0, None), 
-            ("ffn_in", False, 0, None), 
-            ("ffn_out", False, 0, None), 
-            ("ffn_in", True, 1, None), 
-            ("ffn_out", False, 1, None), 
-            ("ffn_in", True, None, None), 
-            ("ffn_out", True, None, None), 
-            ("ffn_in", False, None, None), 
-            ("ffn_out", False, None, None), 
-            ("ffn_in", True, None, 0), 
-            ("ffn_out", False, None, 0),
-            ("ffn_in", True, None, 1), 
-            ("ffn_out", False, None, 1),
-        ],
-    )
-    def test_forward(self, key, features_only, alignment_layer, alignment_heads, init_models, testdata_langpair_dataset):
+    @pytest.mark.parametrize("alignment_heads", [None, 1, 2])
+    @pytest.mark.parametrize("alignment_layer", [None, 0, 1])
+    @pytest.mark.parametrize("features_only", [True, False])
+    @pytest.mark.parametrize("key", ["ffn_in", "ffn_out"])
+    def test_forward(
+        self,
+        key,
+        features_only,
+        alignment_layer,
+        alignment_heads,
+        init_models,
+        testdata_langpair_dataset,
+    ):
         models, _ = init_models
         model = models[0]
         model.eval()
@@ -77,8 +66,7 @@ class TestKNNTransformer:
                 expected_dim,
             ]
         )
-        
-        #Testing against the base transformer model
+
         encoder_out = model.encoder(
             src_tokens=src_tokens,
             src_lengths=src_lengths,
@@ -93,21 +81,21 @@ class TestKNNTransformer:
             alignment_heads=alignment_heads,
         )
 
-        assert torch.allclose(decoder_out, expected_decoder_out)
+        assert torch.equal(decoder_out, expected_decoder_out)
 
         for attn, expected_attn in zip(
-            model_specific_out["attn"], 
+            model_specific_out["attn"],
             expected_model_specific_out["attn"],
         ):
-            assert torch.allclose(attn, expected_attn)
+            assert torch.equal(attn, expected_attn)
 
         for state, expected_state in zip(
             model_specific_out["inner_states"],
             expected_model_specific_out["inner_states"],
         ):
-            assert torch.allclose(state, expected_state)
+            assert torch.equal(state, expected_state)
 
-        #only KNNTransformer will return features
+        # only KNNTransformer will return features
         _, expected_model_specific_out = knnmodel.forward_decoder(
             prev_output_tokens,
             encoder_out=encoder_out,
@@ -117,7 +105,8 @@ class TestKNNTransformer:
             alignment_heads=alignment_heads,
         )
         for feature, expected_feature in zip(
-            model_specific_out["features"],
-            expected_model_specific_out["features"]
+            model_specific_out["features"], expected_model_specific_out["features"]
         ):
-        assert torch.allclose(feature, expected_feature)
+            assert torch.equal(feature, expected_feature)
+
+        assert model_specific_out.keys() == expected_model_specific_out.keys()
