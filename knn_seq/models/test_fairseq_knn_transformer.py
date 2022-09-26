@@ -3,8 +3,9 @@ import torch
 from fairseq.data.base_wrapper_dataset import BaseWrapperDataset
 from fairseq.models.transformer import TransformerDecoderBase, TransformerEncoderBase
 
-from knn_seq.models.conftest import init_models
+from knn_seq.fixtures import init_models
 from knn_seq.models.fairseq_knn_transformer import KNNTransformer
+
 
 class TestKNNTransformer:
     @pytest.mark.parametrize("key", ["ffn_in", "ffn_out"])
