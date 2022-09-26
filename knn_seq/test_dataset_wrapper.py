@@ -7,7 +7,7 @@ from knn_seq.dataset_wrapper import (
     LanguagePairDatasetWithOriginalOrder,
     LanguagePairDatasetWithRawSentence,
 )
-from knn_seq.fixtures import (
+from data.fixtures import (
     testdata_langpair_dataset,
     testdata_src_dict,
     testdata_src_sents,

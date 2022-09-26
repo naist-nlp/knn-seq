@@ -5,7 +5,7 @@ import torch
 
 from . import fairseq_knn_model_base
 
-from knn_seq.fixtures import init_models
+from data.fixtures import init_models
 
 class TestFairseqKNNModelBase:
     @pytest.fixture

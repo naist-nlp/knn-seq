@@ -3,7 +3,12 @@ import torch
 from fairseq.data.base_wrapper_dataset import BaseWrapperDataset
 from fairseq.models.transformer import TransformerDecoderBase, TransformerEncoderBase
 
-from knn_seq.fixtures import init_models
+from data.fixtures import (
+    init_models,
+    testdata_langpair_dataset,
+    testdata_src_dict,
+    testdata_tgt_dict,
+)
 from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 
 
