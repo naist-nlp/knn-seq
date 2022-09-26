@@ -137,9 +137,14 @@ class TestFaissIndex:
     def test_is_trained(self, index):
         faiss_index = FaissIndex(index, SearchIndexConfig())
         assert faiss_index.is_trained == index.is_trained
+        if isinstance(index, faiss.IndexFlat):
+            assert faiss_index.is_trained == True
+        else:
+            assert faiss_index.is_trained == False
 
         index.train(np.zeros((256, D), dtype=np.float32))
         assert faiss_index.is_trained == index.is_trained
+        assert faiss_index.is_trained == True
 
     @pytest.mark.parametrize(
         ("idmap", "metric"),
