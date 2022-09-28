@@ -4,8 +4,8 @@ from fairseq.data.base_wrapper_dataset import BaseWrapperDataset
 from fairseq.models.transformer import TransformerDecoderBase, TransformerEncoderBase
 
 from data.fixtures import (
-    testdata_models,
     testdata_langpair_dataset,
+    testdata_models,
     testdata_src_dict,
     testdata_tgt_dict,
 )
@@ -127,10 +127,10 @@ class TestKNNTransformer:
         features_only,
         alignment_layer,
         alignment_heads,
-        init_models,
+        testdata_models,
         testdata_langpair_dataset,
     ):
-        models, _ = init_models
+        models, _ = testdata_models
         model = models[0]
 
         knnmodel = KNNTransformer(model, key=key)
@@ -209,4 +209,3 @@ class TestKNNTransformer:
                 assert feature == expected_feature
             else:
                 assert torch.equal(feature, expected_feature)
-                
