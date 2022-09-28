@@ -5,12 +5,12 @@ import torch
 
 from . import fairseq_knn_model_base
 
-from data.fixtures import init_models
+from data.fixtures import testdata_models
 
 class TestFairseqKNNModelBase:
     @pytest.fixture
-    def init_knn_model_base(self, init_models) -> None:
-        self.ensemble, self.saved_args = init_models
+    def init_knn_model_base(self, testdata_models) -> None:
+        self.ensemble, self.saved_args = testdata_models
         self.knn_base = fairseq_knn_model_base.FairseqKNNModelBase(self.ensemble)
 
     def test_get_embed_dim(self, init_knn_model_base) -> None:

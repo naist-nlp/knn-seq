@@ -8,7 +8,7 @@ from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from fairseq.tasks.translation import load_langpair_dataset
 
 @pytest.fixture(scope="module")
-def init_models():
+def testdata_models():
     """Load pre-trained model for test."""
 
     filenames = ["data/checkpoints/checkpoint_best.pt"]
