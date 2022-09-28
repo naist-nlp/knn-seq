@@ -3,14 +3,19 @@ import torch
 from fairseq.data.base_wrapper_dataset import BaseWrapperDataset
 from fairseq.models.transformer import TransformerDecoderBase, TransformerEncoderBase
 
-from knn_seq.models.conftest import init_models
+from data.fixtures import (
+    testdata_models,
+    testdata_langpair_dataset,
+    testdata_src_dict,
+    testdata_tgt_dict,
+)
 from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 
 
 class TestKNNTransformer:
     @pytest.mark.parametrize("key", ["ffn_in", "ffn_out"])
-    def test_init(self, key, init_models):
-        models, _ = init_models
+    def test_init(self, key, testdata_models):
+        models, _ = testdata_models
         new_model = KNNTransformer(models[0], key=key)
         assert isinstance(new_model.encoder, TransformerEncoderBase)
         assert isinstance(new_model.decoder, TransformerDecoderBase)
@@ -30,10 +35,10 @@ class TestKNNTransformer:
         features_only,
         alignment_layer,
         alignment_heads,
-        init_models,
+        testdata_models,
         testdata_langpair_dataset,
     ):
-        models, _ = init_models
+        models, _ = testdata_models
         model = models[0]
         model.eval()
         knnmodel = KNNTransformer(model, key=key)
