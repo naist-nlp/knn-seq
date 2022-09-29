@@ -461,9 +461,4 @@ class FaissIndex(SearchIndex):
         Args:
             path (str): index file path to save.
         """
-        if self.use_gpu and not self.use_ivf:
-            self.to_cpu()
-            faiss.write_index(self.index, path)
-            self.to_gpu()
-            return
         return faiss.write_index(self.index, path)

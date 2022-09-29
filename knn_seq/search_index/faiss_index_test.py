@@ -203,3 +203,38 @@ class TestFaissIndex:
         assert len(faiss_index) == N
         faiss_index.reset()
         assert len(faiss_index) == index.ntotal == 0
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            faiss.IndexFlatL2(D),
+            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
+            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
+        ],
+    )
+    def test_save_index(self, index, tmp_path):
+        faiss_index = FaissIndex(index, SearchIndexConfig())
+        index.train(np.zeros((256, D), dtype=np.float32))
+        index.add(np.zeros((N, D), dtype=np.float32))
+
+        index_path = str(tmp_path / "index.bin")
+        faiss_index.save_index(index_path)
+
+        assert faiss.read_index(index_path).ntotal == N
+
+    @pytest.mark.parametrize(
+        "index",
+        [
+            faiss.IndexFlatL2(D),
+            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
+            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
+        ],
+    )
+    def test_load_index(self, index, tmp_path):
+        index.train(np.zeros((256, D), dtype=np.float32))
+        index.add(np.zeros((N, D), dtype=np.float32))
+
+        index_path = str(tmp_path / "index.bin")
+        faiss.write_index(index, index_path)
+
+        assert FaissIndex.load_index(index_path).ntotal == N
