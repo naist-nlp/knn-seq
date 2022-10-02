@@ -13,7 +13,7 @@ def test_space_tokenize():
 
 
 # wmt16 de-en train_data
-example = [
+_EXAMPLE = [
     "You have requested a debate on this subject in the course of the next few days, during this part-session.",
     "Resumption of the session",
     "It will, I hope, be examined in a positive light.",
@@ -21,23 +21,29 @@ example = [
 
 
 class TestHFAutoTokenizer:
+    @pytest.mark.parametrize("pretokenized", [True, False])
     @pytest.mark.parametrize(
         "name_or_path", ["all-MiniLM-L6-v2", "distilbert-base-uncased"]
     )
-    @pytest.mark.parametrize("pretokenized", [True, False])
     def test_encode(self, name_or_path, pretokenized):
         tokenizer = HFAutoTokenizer.build_tokenizer(name_or_path, pretokenized)
         if name_or_path in SBERT_MODELS:
-            encoder = SentenceTransformer(name_or_path, device="cpu").tokenizer
+            transformers_tokenizer = SentenceTransformer(
+                name_or_path, device="cpu"
+            ).tokenizer
         else:
-            encoder = AutoTokenizer.from_pretrained(name_or_path)
-        for text in example:
+            transformers_tokenizer = AutoTokenizer.from_pretrained(name_or_path)
+        assert (
+            tokenizer.tokenizer.__class__.__name__
+            == transformers_tokenizer.__class__.__name__
+        )
+        for text in _EXAMPLE:
             if tokenizer.pretokenized:
-                assert tokenizer.encode(text) == encoder.convert_tokens_to_ids(
-                    space_tokenize(text)
-                )
+                assert tokenizer.encode(
+                    text
+                ) == transformers_tokenizer.convert_tokens_to_ids(space_tokenize(text))
             else:
-                assert tokenizer.encode(text) == encoder.encode(
+                assert tokenizer.encode(text) == transformers_tokenizer.encode(
                     text, add_special_tokens=False
                 )
 
@@ -46,8 +52,14 @@ class TestHFAutoTokenizer:
     )
     def test_decode(self, name_or_path):
         tokenizer = HFAutoTokenizer.build_tokenizer(name_or_path)
-        for text in example:
+        if name_or_path in SBERT_MODELS:
+            transformers_tokenizer = SentenceTransformer(
+                name_or_path, device="cpu"
+            ).tokenizer
+        else:
+            transformers_tokenizer = AutoTokenizer.from_pretrained(name_or_path)
+        for text in _EXAMPLE:
             decoded_example = tokenizer.decode(tokenizer.encode(text))
-            assert decoded_example == tokenizer.tokenizer.tokenize(
+            assert decoded_example == transformers_tokenizer.tokenize(
                 text, add_special_tokens=False
             )
