@@ -13,6 +13,14 @@ from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 
 
 class TestKNNTransformer:
+    @pytest.fixture
+    def testdata_collater(self, testdata_langpair_dataset):
+        self.num_samples = 5
+
+        dataset = BaseWrapperDataset(testdata_langpair_dataset)
+        return dataset.dataset.collater([dataset[i] for i in range(self.num_samples)])
+
+
     @pytest.mark.parametrize("key", ["ffn_in", "ffn_out"])
     def test_init(self, key, testdata_models):
         models, _ = testdata_models
@@ -37,20 +45,16 @@ class TestKNNTransformer:
         alignment_heads,
         testdata_models,
         testdata_langpair_dataset,
+        testdata_collater,
     ):
         models, _ = testdata_models
         model = models[0]
         model.eval()
         knnmodel = KNNTransformer(model, key=key)
 
-        num_samples = 5
-
-        dataset = BaseWrapperDataset(testdata_langpair_dataset)
-        collator = dataset.dataset.collater([dataset[i] for i in range(num_samples)])
-
-        src_tokens = collator["net_input"]["src_tokens"]
-        src_lengths = collator["net_input"]["src_lengths"]
-        prev_output_tokens = collator["net_input"]["prev_output_tokens"]
+        src_tokens = testdata_collater["net_input"]["src_tokens"]
+        src_lengths = testdata_collater["net_input"]["src_lengths"]
+        prev_output_tokens = testdata_collater["net_input"]["prev_output_tokens"]
 
         decoder_out, model_specific_out = knnmodel.forward(
             src_tokens=src_tokens,
@@ -67,8 +71,8 @@ class TestKNNTransformer:
 
         assert decoder_out.shape == torch.Size(
             [
-                num_samples,  # Batch size
-                collator["target"].shape[1],  # tgt length
+                self.num_samples,  # Batch size
+                testdata_collater["target"].shape[1],  # tgt length
                 expected_dim,
             ]
         )
@@ -129,20 +133,16 @@ class TestKNNTransformer:
         alignment_heads,
         testdata_models,
         testdata_langpair_dataset,
+        testdata_collater,
     ):
         models, _ = testdata_models
         model = models[0]
-
+        model.eval()
         knnmodel = KNNTransformer(model, key=key)
 
-        num_samples = 2
-
-        dataset = BaseWrapperDataset(testdata_langpair_dataset)
-        collator = dataset.dataset.collater([dataset[i] for i in range(num_samples)])
-
-        src_tokens = collator["net_input"]["src_tokens"]
-        src_lengths = collator["net_input"]["src_lengths"]
-        prev_output_tokens = collator["net_input"]["prev_output_tokens"]
+        src_tokens = testdata_collater["net_input"]["src_tokens"]
+        src_lengths = testdata_collater["net_input"]["src_lengths"]
+        prev_output_tokens = testdata_collater["net_input"]["prev_output_tokens"]
 
         encoder_out = knnmodel.encoder(
             src_tokens=src_tokens,
@@ -164,8 +164,8 @@ class TestKNNTransformer:
 
         assert decoder_out.shape == torch.Size(
             [
-                num_samples,  # Batch size
-                collator["target"].shape[1],  # tgt length
+                self.num_samples,  # Batch size
+                testdata_collater["target"].shape[1],  # tgt length
                 expected_dim,
             ]
         )
@@ -209,3 +209,108 @@ class TestKNNTransformer:
                 assert feature == expected_feature
             else:
                 assert torch.equal(feature, expected_feature)
+
+    @pytest.mark.parametrize("full_context_alignment", [True, False])
+    @pytest.mark.parametrize("alignment_heads", [None, 1, 2])
+    @pytest.mark.parametrize("alignment_layer", [None, 0, 1])
+    @pytest.mark.parametrize("key", ["ffn_in", "ffn_out"])
+    def test_extract_features_scriptable(
+        self,
+        key,
+        alignment_layer,
+        alignment_heads,
+        full_context_alignment,
+        testdata_models,
+        testdata_collater,
+    ):
+        models, _ = testdata_models
+        model = models[0]
+        model.eval()
+        knnmodel = KNNTransformer(model, key=key)
+
+        src_tokens = testdata_collater["net_input"]["src_tokens"]
+        src_lengths = testdata_collater["net_input"]["src_lengths"]
+        prev_output_tokens = testdata_collater["net_input"]["prev_output_tokens"]
+
+        encoder_out = knnmodel.encoder(
+            src_tokens=src_tokens,
+            src_lengths=src_lengths,
+        )
+
+        decoder_out, model_specific_out = knnmodel.extract_features_scriptable(
+            prev_output_tokens,
+            encoder_out=encoder_out,
+            full_context_alignment=full_context_alignment,
+            alignment_layer=alignment_layer,
+            alignment_heads=alignment_heads,
+        )
+        
+        assert decoder_out.shape == torch.Size(
+            [
+                self.num_samples,  # Batch size
+                testdata_collater["target"].shape[1],  # tgt length
+                knnmodel.decoder.embed_tokens.embedding_dim,
+            ]
+        )
+        
+        # Figuring out features from KNNTransformer
+        embedded_positions = model.decoder.embed_positions(prev_output_tokens)
+        embedded_tokens = model.decoder.embed_scale * model.decoder.embed_tokens(
+            prev_output_tokens
+        )
+
+        x = embedded_positions + embedded_tokens
+        x = x.transpose(0, 1)
+        assert torch.equal(model_specific_out['inner_states'][0], x)
+        is_alignment_layer = (alignment_layer == 0)
+        attn_mask = model.decoder.buffered_future_mask(x) if not full_context_alignment else None
+        self_attn_padding_mask = prev_output_tokens.eq(model.decoder.padding_idx)
+        x, layer_attn, _ = model.decoder.layers[0](
+            x,
+            encoder_out["encoder_out"][0],
+            encoder_out["encoder_padding_mask"][0],
+            None,
+            self_attn_mask=attn_mask,
+            self_attn_padding_mask=self_attn_padding_mask,
+            need_attn=is_alignment_layer,
+            need_head_weights=is_alignment_layer,
+        )
+        assert torch.equal(model_specific_out['inner_states'][1], x)
+        if alignment_layer:
+            attn = layer_attn.float()
+            if alignment_heads is not None:
+                attn = attn[:alignment_heads]
+            torch.equal(
+                model_specific_out["attn"][0], 
+                attn.mean(dim=0)
+            )
+
+        is_alignment_layer = (alignment_layer != 0)
+        attn_mask = model.decoder.buffered_future_mask(x) if not full_context_alignment else None
+        x, _, _, expected_features = knnmodel.forward_decoder_last_layer(
+            x,
+            encoder_out["encoder_out"][0],
+            encoder_out["encoder_padding_mask"][0],
+            None,
+            self_attn_mask=attn_mask,
+            self_attn_padding_mask=self_attn_padding_mask,
+            need_attn=is_alignment_layer,
+            need_head_weights=is_alignment_layer,
+        )
+        assert torch.equal(model_specific_out['inner_states'][2], x)
+        if alignment_layer:
+            attn = layer_attn.float()
+            if alignment_heads is not None:
+                attn = attn[:alignment_heads]
+            torch.equal(
+                model_specific_out["attn"][0], 
+                attn.mean(dim=0)
+            )
+
+        if key == "ffn_out":
+            assert expected_features == None
+        else:
+            assert torch.equal(model_specific_out["features"][0], expected_features)
+
+        expected_decoder_out = x.transpose(0, 1)
+        assert torch.equal(decoder_out, expected_decoder_out)
