@@ -33,10 +33,7 @@ class TestHFAutoTokenizer:
             ).tokenizer
         else:
             transformers_tokenizer = AutoTokenizer.from_pretrained(name_or_path)
-        assert (
-            tokenizer.tokenizer.__class__.__name__
-            == transformers_tokenizer.__class__.__name__
-        )
+        assert tokenizer.tokenizer.__class__ == transformers_tokenizer.__class__
         for text in _EXAMPLE:
             if tokenizer.pretokenized:
                 assert tokenizer.encode(
