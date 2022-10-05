@@ -233,14 +233,6 @@ class FaissIndex(SearchIndex):
         self.index.train(vectors)
         self.set_param("verbose", False)
 
-    def set_direct_map_type(
-        self,
-        index: Union[faiss.IndexIVF, faiss.IndexPreTransform],
-        direct_map_type: faiss.DirectMap,
-    ):
-        if self.use_ivf:
-            faiss.extract_index_ivf(index).set_direct_map_type(direct_map_type)
-
     @property
     def gpu_quantizer(self):
         if not hasattr(self, "_gpu_quantizer"):
@@ -469,9 +461,4 @@ class FaissIndex(SearchIndex):
         Args:
             path (str): index file path to save.
         """
-        if self.use_gpu and not self.use_ivf:
-            self.to_cpu()
-            faiss.write_index(self.index, path)
-            self.to_gpu()
-            return
         return faiss.write_index(self.index, path)
