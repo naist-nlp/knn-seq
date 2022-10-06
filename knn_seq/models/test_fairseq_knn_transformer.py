@@ -20,7 +20,6 @@ class TestKNNTransformer:
         dataset = BaseWrapperDataset(testdata_langpair_dataset)
         return dataset.dataset.collater([dataset[i] for i in range(self.num_samples)])
 
-
     @pytest.mark.parametrize("key", ["ffn_in", "ffn_out"])
     def test_init(self, key, testdata_models):
         models, _ = testdata_models
@@ -244,7 +243,7 @@ class TestKNNTransformer:
             alignment_layer=alignment_layer,
             alignment_heads=alignment_heads,
         )
-        
+
         assert decoder_out.shape == torch.Size(
             [
                 self.num_samples,  # Batch size
@@ -252,8 +251,11 @@ class TestKNNTransformer:
                 knnmodel.decoder.embed_tokens.embedding_dim,
             ]
         )
-        
+
         # Figuring out features from KNNTransformer
+        is_alignment_layer0 = alignment_layer == 0
+        is_alignment_layer1 = alignment_layer == 1 or alignment_layer == None
+
         embedded_positions = model.decoder.embed_positions(prev_output_tokens)
         embedded_tokens = model.decoder.embed_scale * model.decoder.embed_tokens(
             prev_output_tokens
@@ -261,9 +263,12 @@ class TestKNNTransformer:
 
         x = embedded_positions + embedded_tokens
         x = x.transpose(0, 1)
-        assert torch.equal(model_specific_out['inner_states'][0], x)
-        is_alignment_layer = (alignment_layer == 0)
-        attn_mask = model.decoder.buffered_future_mask(x) if not full_context_alignment else None
+        assert torch.equal(model_specific_out["inner_states"][0], x)
+        attn_mask = (
+            model.decoder.buffered_future_mask(x)
+            if not full_context_alignment
+            else None
+        )
         self_attn_padding_mask = prev_output_tokens.eq(model.decoder.padding_idx)
         x, layer_attn, _ = model.decoder.layers[0](
             x,
@@ -272,21 +277,21 @@ class TestKNNTransformer:
             None,
             self_attn_mask=attn_mask,
             self_attn_padding_mask=self_attn_padding_mask,
-            need_attn=is_alignment_layer,
-            need_head_weights=is_alignment_layer,
+            need_attn=is_alignment_layer0,
+            need_head_weights=is_alignment_layer0,
         )
-        assert torch.equal(model_specific_out['inner_states'][1], x)
-        if alignment_layer:
+        assert torch.equal(model_specific_out["inner_states"][1], x)
+        if is_alignment_layer0:
             attn = layer_attn.float()
             if alignment_heads is not None:
                 attn = attn[:alignment_heads]
-            torch.equal(
-                model_specific_out["attn"][0], 
-                attn.mean(dim=0)
-            )
+            torch.equal(model_specific_out["attn"][0], attn.mean(dim=0))
 
-        is_alignment_layer = (alignment_layer != 0)
-        attn_mask = model.decoder.buffered_future_mask(x) if not full_context_alignment else None
+        attn_mask = (
+            model.decoder.buffered_future_mask(x)
+            if not full_context_alignment
+            else None
+        )
         x, _, _, expected_features = knnmodel.forward_decoder_last_layer(
             x,
             encoder_out["encoder_out"][0],
@@ -294,18 +299,15 @@ class TestKNNTransformer:
             None,
             self_attn_mask=attn_mask,
             self_attn_padding_mask=self_attn_padding_mask,
-            need_attn=is_alignment_layer,
-            need_head_weights=is_alignment_layer,
+            need_attn=is_alignment_layer1,
+            need_head_weights=is_alignment_layer1,
         )
-        assert torch.equal(model_specific_out['inner_states'][2], x)
-        if alignment_layer:
+        assert torch.equal(model_specific_out["inner_states"][2], x)
+        if is_alignment_layer1:
             attn = layer_attn.float()
             if alignment_heads is not None:
                 attn = attn[:alignment_heads]
-            torch.equal(
-                model_specific_out["attn"][0], 
-                attn.mean(dim=0)
-            )
+            torch.equal(model_specific_out["attn"][0], attn.mean(dim=0))
 
         if key == "ffn_out":
             assert expected_features == None
