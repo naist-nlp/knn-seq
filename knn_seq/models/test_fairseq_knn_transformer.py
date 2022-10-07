@@ -366,9 +366,10 @@ class TestKNNTransformer:
         )
 
         index_last_layer = model.decoder.num_layers - 1
-        if alignment_layer == None:
-            alignment_layer = index_last_layer
-        is_alignment_layer = alignment_layer == index_last_layer
+        actual_alignment_layer = (
+            index_last_layer if alignment_layer == None else alignment_layer
+        )
+        is_alignment_layer = actual_alignment_layer == index_last_layer
 
         input_to_last_layer = model_specific_out["inner_states"][index_last_layer]
         self_attn_mask = (
