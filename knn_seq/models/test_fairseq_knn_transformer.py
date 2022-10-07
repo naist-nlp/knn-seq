@@ -256,11 +256,12 @@ class TestKNNTransformer:
         )
 
         # Figuring out features from KNNTransformer
-        if alignment_layer == None:
-            alignment_layer = model.decoder.num_layers - 1
+        actual_alignment_layer = (
+            model.decoder.num_layers - 1 if alignment_layer == None else alignment_layer
+        )
 
-        is_alignment_layer0 = alignment_layer == 0
-        is_alignment_layer1 = alignment_layer == 1
+        is_alignment_layer0 = actual_alignment_layer == 0
+        is_alignment_layer1 = actual_alignment_layer == 1
 
         embedded_positions = model.decoder.embed_positions(prev_output_tokens)
         embedded_tokens = model.decoder.embed_scale * model.decoder.embed_tokens(
