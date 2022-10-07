@@ -519,4 +519,3 @@ def encoder_decoder_attention(
         x = last_layer.encoder_attn_layer_norm(x)
 
     return x
-    
