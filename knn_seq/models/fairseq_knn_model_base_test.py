@@ -52,19 +52,13 @@ class TestFairseqKNNModelBase:
         ]
         assert feature_sizes == expected_feature_sizes
 
-    @pytest.mark.parametrize(
-        "net_inputs",
-        [
-            {
-                "src_tokens": torch.LongTensor([[4, 5, 6]]),
-                "src_lengths": torch.Tensor([3]),
-            }
-        ],
-    )
-    def test_extract_sentence_features(
-        self, net_inputs, testdata_models, knn_model_base
-    ) -> None:
+    def test_extract_sentence_features(self, testdata_models, knn_model_base) -> None:
         ensemble, _ = testdata_models
+        net_inputs = {
+            "src_tokens": torch.LongTensor([[4, 5, 6]]),
+            "src_lengths": torch.Tensor([3]),
+        }
+
         encoder_features = knn_model_base.extract_sentence_features(net_inputs)
         feature_sizes = [feature.size() for feature in encoder_features]
 
