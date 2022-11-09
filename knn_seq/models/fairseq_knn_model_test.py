@@ -18,7 +18,7 @@ from knn_seq.search_index.search_index import SearchIndexConfig
 
 class TestFairseqKNNModel:
     @pytest.fixture
-    def knn_model(self, testdata_models) -> None:
+    def knn_model(self, testdata_models):
         ensemble, _ = testdata_models
         return FairseqKNNModel(ensemble)
 
