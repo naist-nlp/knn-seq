@@ -75,3 +75,62 @@ class TestFairseqKNNModel:
 
         assert knn_model.knn_threshold == threshold
         assert knn_model.knn_weight == weight
+
+    @pytest.mark.parametrize("weight", [0.0, 0.5, 1.0])
+    @pytest.mark.parametrize("temperature", [1.0, 2.5])
+    @pytest.mark.parametrize("topk", [1, 3])
+    @pytest.mark.parametrize("key", ["ffn_in", "ffn_out"])
+    def test_search(
+        self,
+        testdata_models,
+        testdata_token_storage,
+        testdata_collator,
+        key,
+        topk,
+        temperature,
+        weight,
+    ):
+        ensemble, _ = testdata_models
+        knn_model = FairseqKNNModel(ensemble, key=key)
+
+        dim = knn_model.get_embed_dim()[0]
+
+        model_out = knn_model.forward(
+            src_tokens=testdata_collator["net_input"]["src_tokens"],
+            src_lengths=testdata_collator["net_input"]["src_lengths"],
+            prev_output_tokens=testdata_collator["net_input"]["prev_output_tokens"],
+        )
+        queries = model_out[0][:, 4]
+
+        all_vectors = torch.flatten(model_out[0], end_dim=-2).numpy()
+        index = FaissIndex(
+            faiss.IndexFlatL2(dim),
+            SearchIndexConfig(),
+        )
+        index.add(all_vectors)
+
+        knn_model.set_index(
+            testdata_token_storage,
+            indexes=[index],
+            knn_topk=topk,
+            knn_temperature=temperature,
+            knn_weight=weight,
+        )
+
+        output = knn_model.search(queries, 0)
+        assert output != None
+        assert torch.equal(
+            output.indices[:, 0],
+            testdata_collator["net_input"]["src_tokens"][:, 4],
+        )
+
+        # scores of all the exact matches should be 0
+        assert torch.equal(output.scores[:, 0], torch.zeros((queries.shape[0])))
+
+        for i in range(1, topk):
+            assert not torch.equal(output.scores[:, i], torch.zeros((queries.shape[0])))
+
+        offset = torch.normal(mean=0, std=0.1, size=queries.shape)
+        distance = -torch.norm(offset, dim=1) ** 2
+        output = knn_model.search(queries + offset, 0)
+        assert torch.allclose(output.scores[:, 0], distance)
