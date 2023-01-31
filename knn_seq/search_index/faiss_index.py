@@ -81,11 +81,6 @@ class FaissIndex(SearchIndex):
     def __len__(self) -> int:
         return self.index.ntotal
 
-    def set_param(self, name: str, param: Any):
-        if self.use_gpu:
-            faiss.GpuParameterSpace().set_index_parameter(self.index, name, param)
-        return faiss.ParameterSpace().set_index_parameter(self.index, name, param)
-
     def set_nprobe(self, nprobe: int):
         """Set nprobe parameter for IVF* indexes.
 
@@ -99,7 +94,14 @@ class FaissIndex(SearchIndex):
         if nprobe < 1:
             raise ValueError("`nprobe` must be greater than or equal to 1.")
         if self.use_ivf:
-            self.set_param("nprobe", nprobe)
+            if isinstance(self.index, faiss.IndexPreTransform):
+                index = self.index.index
+            else:
+                index = self.index
+            if isinstance(index, faiss.GpuIndexIVF):
+                faiss.GpuParameterSpace().set_index_parameter(index, "nprobe", nprobe)
+            else:
+                faiss.ParameterSpace().set_index_parameter(index, "nprobe", nprobe)
 
     def set_efsearch(self, efsearch: int):
         """Set efSearch parameter for HNSW indexes.
@@ -113,7 +115,7 @@ class FaissIndex(SearchIndex):
         if efsearch < 1:
             raise ValueError("`efsearch` must be greater than or equal to 1.")
         if self.use_hnsw:
-            self.set_param("efSearch", efsearch)
+            faiss.ParameterSpace().set_index_parameter(self.index, "efSearch", efsearch)
 
     @property
     def dim(self) -> int:
@@ -250,9 +252,9 @@ class FaissIndex(SearchIndex):
         vectors = self.normalize(vectors)
         logger.info("Training on {}".format("GPU" if self.use_gpu else "CPU"))
 
-        self.set_param("verbose", verbose)
+        faiss.ParameterSpace().set_index_parameter(self.index, "verbose", verbose)
         self.index.train(vectors)
-        self.set_param("verbose", False)
+        faiss.ParameterSpace().set_index_parameter(self.index, "verbose", False)
 
     @property
     def gpu_quantizer(self):

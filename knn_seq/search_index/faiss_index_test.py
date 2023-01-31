@@ -51,7 +51,14 @@ def mkparams_index():
         yield index_and_config[0]
 
 
-@pytest.mark.parametrize("index", mkparams_index())
+@pytest.mark.parametrize(
+    "index",
+    [
+        faiss.IndexFlatL2(D),
+        faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
+        faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
+    ],
+)
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA available.")
 def test_faiss_index_to_gpu(index):
     gpu_index = faiss_index_to_gpu(index)
@@ -120,9 +127,24 @@ class TestFaissIndex:
 
     @pytest.mark.parametrize("index, config", mkparams_index_and_config())
     @pytest.mark.parametrize("nprobe", [-1, 0, 1, 8])
+    @pytest.mark.parametrize(
+        "use_gpu",
+        [
+            False,
+            pytest.param(
+                True,
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="No CUDA available."
+                ),
+            ),
+        ],
+    )
     def test_set_nprobe(
-        self, index: faiss.Index, config: SearchIndexConfig, nprobe: int
+        self, index: faiss.Index, config: SearchIndexConfig, nprobe: int, use_gpu: bool
     ):
+        if use_gpu:
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, 0, index)
         faiss_index = FaissIndex(index, config)
         if nprobe < 1:
             with pytest.raises(ValueError):
@@ -130,8 +152,9 @@ class TestFaissIndex:
         else:
             faiss_index.set_nprobe(nprobe)
             if config.ivf_lists > 0:
-                assert faiss.extract_index_ivf(index).nprobe == nprobe
+                assert index.nprobe == nprobe
 
+    # HNSW index/coarse quantizer runs on CPU only.
     @pytest.mark.parametrize("index, config", mkparams_index_and_config())
     @pytest.mark.parametrize("efsearch", [-1, 0, 1, 8])
     def test_set_efsearch(
