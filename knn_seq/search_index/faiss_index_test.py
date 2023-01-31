@@ -35,6 +35,21 @@ def mkparams_index():
         yield index
 
 
+def mkparams_index_and_config():
+    for index_and_config in [
+        (faiss.IndexFlatL2(D), SearchIndexConfig()),
+        (
+            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
+            SearchIndexConfig(ivf_lists=8),
+        ),
+        (
+            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
+            SearchIndexConfig(ivf_lists=8, pq_subvec=4),
+        ),
+    ]:
+        yield index_and_config
+
+
 @pytest.mark.parametrize("index", mkparams_index())
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA available.")
 def test_faiss_index_to_gpu(index):
@@ -101,6 +116,20 @@ class TestFaissIndex:
         assert len(faiss_index) == N
         index.add(np.zeros((N, D), dtype=np.float32))
         assert len(faiss_index) == 2 * N
+
+    @pytest.mark.parametrize("index, config", mkparams_index_and_config())
+    @pytest.mark.parametrize("nprobe", [-1, 0, 1, 8])
+    def test_set_nprobe(
+        self, index: faiss.Index, config: SearchIndexConfig, nprobe: int
+    ):
+        faiss_index = FaissIndex(index, config)
+        if nprobe < 1:
+            with pytest.raises(ValueError):
+                faiss_index.set_nprobe(nprobe)
+        else:
+            faiss_index.set_nprobe(nprobe)
+            if config.ivf_lists > 0:
+                assert faiss.extract_index_ivf(index).nprobe == nprobe
 
     @pytest.mark.parametrize("index", mkparams_index())
     def test_dim(self, index):

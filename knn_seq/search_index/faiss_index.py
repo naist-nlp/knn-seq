@@ -87,6 +87,17 @@ class FaissIndex(SearchIndex):
         return faiss.ParameterSpace().set_index_parameter(self.index, name, param)
 
     def set_nprobe(self, nprobe: int):
+        """Set nprobe parameter for IVF* indexes.
+
+        Args:
+            nprobe (int): Number of nearest neighbor clusters that are
+                probed in search time.
+
+        Raises:
+            ValueError: When `nprobe` is smaller than 1.
+        """
+        if nprobe < 1:
+            raise ValueError("`nprobe` must be greater than or equal to 1.")
         if self.use_ivf:
             self.set_param("nprobe", nprobe)
 
