@@ -26,14 +26,16 @@ def is_gpu_index(index):
     return isinstance(concrete_index, faiss.GpuIndex)
 
 
-@pytest.mark.parametrize(
-    "index",
-    [
+def mkparams_index():
+    for index in [
         faiss.IndexFlatL2(D),
         faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
         faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-    ],
-)
+    ]:
+        yield index
+
+
+@pytest.mark.parametrize("index", mkparams_index())
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA available.")
 def test_faiss_index_to_gpu(index):
     gpu_index = faiss_index_to_gpu(index)
@@ -63,14 +65,7 @@ def test_faiss_index_to_gpu(index):
     assert is_gpu_index(gpu_index)
 
 
-@pytest.mark.parametrize(
-    "index",
-    [
-        faiss.IndexFlatL2(D),
-        faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
-        faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-    ],
-)
+@pytest.mark.parametrize("index", mkparams_index())
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="No CUDA available.")
 def test_faiss_index_to_cpu(index):
     # CPU -> CPU
@@ -95,14 +90,7 @@ def test_faiss_index_to_cpu(index):
 
 
 class TestFaissIndex:
-    @pytest.mark.parametrize(
-        "index",
-        [
-            faiss.IndexFlatL2(D),
-            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
-            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-        ],
-    )
+    @pytest.mark.parametrize("index", mkparams_index())
     def test___len__(self, index):
         faiss_index = FaissIndex(index, SearchIndexConfig())
         assert len(faiss_index) == 0
@@ -114,26 +102,12 @@ class TestFaissIndex:
         index.add(np.zeros((N, D), dtype=np.float32))
         assert len(faiss_index) == 2 * N
 
-    @pytest.mark.parametrize(
-        "index",
-        [
-            faiss.IndexFlatL2(D),
-            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
-            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-        ],
-    )
+    @pytest.mark.parametrize("index", mkparams_index())
     def test_dim(self, index):
         faiss_index = FaissIndex(index, SearchIndexConfig())
         assert faiss_index.dim == D
 
-    @pytest.mark.parametrize(
-        "index",
-        [
-            faiss.IndexFlatL2(D),
-            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
-            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-        ],
-    )
+    @pytest.mark.parametrize("index", mkparams_index())
     def test_is_trained(self, index):
         faiss_index = FaissIndex(index, SearchIndexConfig())
         assert faiss_index.is_trained == index.is_trained
@@ -172,14 +146,7 @@ class TestFaissIndex:
         else:
             assert np.allclose(np.array(processed_distances), distances)
 
-    @pytest.mark.parametrize(
-        "index",
-        [
-            faiss.IndexFlatL2(D),
-            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
-            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-        ],
-    )
+    @pytest.mark.parametrize("index", mkparams_index())
     def test_clear(self, index):
         faiss_index = FaissIndex(index, SearchIndexConfig())
         index.train(np.zeros((256, D), dtype=np.float32))
@@ -188,14 +155,7 @@ class TestFaissIndex:
         faiss_index.clear()
         assert len(faiss_index) == index.ntotal == 0
 
-    @pytest.mark.parametrize(
-        "index",
-        [
-            faiss.IndexFlatL2(D),
-            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
-            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-        ],
-    )
+    @pytest.mark.parametrize("index", mkparams_index())
     def test_reset(self, index):
         faiss_index = FaissIndex(index, SearchIndexConfig())
         index.train(np.zeros((256, D), dtype=np.float32))
@@ -204,14 +164,7 @@ class TestFaissIndex:
         faiss_index.reset()
         assert len(faiss_index) == index.ntotal == 0
 
-    @pytest.mark.parametrize(
-        "index",
-        [
-            faiss.IndexFlatL2(D),
-            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
-            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-        ],
-    )
+    @pytest.mark.parametrize("index", mkparams_index())
     def test_save_index(self, index, tmp_path):
         faiss_index = FaissIndex(index, SearchIndexConfig())
         index.train(np.zeros((256, D), dtype=np.float32))
@@ -222,14 +175,7 @@ class TestFaissIndex:
 
         assert faiss.read_index(index_path).ntotal == N
 
-    @pytest.mark.parametrize(
-        "index",
-        [
-            faiss.IndexFlatL2(D),
-            faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
-            faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-        ],
-    )
+    @pytest.mark.parametrize("index", mkparams_index())
     def test_load_index(self, index, tmp_path):
         index.train(np.zeros((256, D), dtype=np.float32))
         index.add(np.zeros((N, D), dtype=np.float32))
