@@ -26,18 +26,10 @@ def is_gpu_index(index):
     return isinstance(concrete_index, faiss.GpuIndex)
 
 
-def mkparams_index():
-    for index in [
-        faiss.IndexFlatL2(D),
-        faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
-        faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
-    ]:
-        yield index
-
-
 def mkparams_index_and_config():
     for index_and_config in [
         (faiss.IndexFlatL2(D), SearchIndexConfig()),
+        (faiss.IndexHNSWFlat(D, 32), SearchIndexConfig(hnsw_edges=32)),
         (
             faiss.IndexIVFFlat(faiss.IndexFlatL2(D), D, 8),
             SearchIndexConfig(ivf_lists=8),
@@ -46,8 +38,17 @@ def mkparams_index_and_config():
             faiss.IndexIVFPQ(faiss.IndexFlatL2(D), D, 8, 4, 8),
             SearchIndexConfig(ivf_lists=8, pq_subvec=4),
         ),
+        (
+            faiss.IndexIVFPQ(faiss.IndexHNSWFlat(D, 32), D, 8, 4, 8),
+            SearchIndexConfig(hnsw_edges=32, ivf_lists=8, pq_subvec=4),
+        ),
     ]:
         yield index_and_config
+
+
+def mkparams_index():
+    for index_and_config in mkparams_index_and_config():
+        yield index_and_config[0]
 
 
 @pytest.mark.parametrize("index", mkparams_index())
@@ -131,6 +132,25 @@ class TestFaissIndex:
             if config.ivf_lists > 0:
                 assert faiss.extract_index_ivf(index).nprobe == nprobe
 
+    @pytest.mark.parametrize("index, config", mkparams_index_and_config())
+    @pytest.mark.parametrize("efsearch", [-1, 0, 1, 8])
+    def test_set_efsearch(
+        self, index: faiss.Index, config: SearchIndexConfig, efsearch: int
+    ):
+        faiss_index = FaissIndex(index, config)
+        if efsearch < 1:
+            with pytest.raises(ValueError):
+                faiss_index.set_efsearch(efsearch)
+        else:
+            faiss_index.set_efsearch(efsearch)
+            if config.hnsw_edges > 0:
+                if isinstance(index, faiss.IndexIVF):
+                    assert (
+                        faiss.downcast_index(index.quantizer).hnsw.efSearch == efsearch
+                    )
+                elif isinstance(index, faiss.IndexHNSW):
+                    assert index.hnsw.efSearch == efsearch
+
     @pytest.mark.parametrize("index", mkparams_index())
     def test_dim(self, index):
         faiss_index = FaissIndex(index, SearchIndexConfig())
@@ -140,7 +160,7 @@ class TestFaissIndex:
     def test_is_trained(self, index):
         faiss_index = FaissIndex(index, SearchIndexConfig())
         assert faiss_index.is_trained == index.is_trained
-        if isinstance(index, faiss.IndexFlat):
+        if isinstance(index, (faiss.IndexFlat, faiss.IndexHNSWFlat)):
             assert faiss_index.is_trained == True
         else:
             assert faiss_index.is_trained == False
