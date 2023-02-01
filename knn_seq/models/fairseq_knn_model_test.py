@@ -90,6 +90,8 @@ class TestFairseqKNNModel:
         temperature,
         weight,
     ):
+        queries_to_test = 4
+
         ensemble, _ = testdata_models
         knn_model = FairseqKNNModel(ensemble, key=key)
 
@@ -100,7 +102,7 @@ class TestFairseqKNNModel:
             src_lengths=testdata_collator["net_input"]["src_lengths"],
             prev_output_tokens=testdata_collator["net_input"]["prev_output_tokens"],
         )
-        queries = model_out[0][:, 4]
+        queries = model_out[0][:, queries_to_test]
 
         all_vectors = torch.flatten(model_out[0], end_dim=-2).numpy()
         index = FaissIndex(
@@ -121,7 +123,7 @@ class TestFairseqKNNModel:
         assert output != None
         assert torch.equal(
             output.indices[:, 0],
-            testdata_collator["net_input"]["src_tokens"][:, 4],
+            testdata_collator["net_input"]["src_tokens"][:, queries_to_test],
         )
 
         # scores of all the exact matches should be 0
