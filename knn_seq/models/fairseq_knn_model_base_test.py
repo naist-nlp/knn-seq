@@ -27,8 +27,8 @@ class TestFairseqKNNModelBase:
     ) -> None:
         ensemble, _ = testdata_models
         net_inputs = {
-            "src_tokens": torch.LongTensor([[4, 5, 6]]),
-            "src_lengths": torch.Tensor([3]),
+            "src_tokens": torch.LongTensor([[4, 5, 6], [7, 8, 0]]),
+            "src_lengths": torch.Tensor([3, 2]),
         }
 
         # Optionality test
@@ -63,8 +63,8 @@ class TestFairseqKNNModelBase:
     def test_extract_sentence_features(self, testdata_models, knn_model_base) -> None:
         ensemble, _ = testdata_models
         net_inputs = {
-            "src_tokens": torch.LongTensor([[4, 5, 6]]),
-            "src_lengths": torch.Tensor([3]),
+            "src_tokens": torch.LongTensor([[4, 5, 6], [7, 8, 0]]),
+            "src_lengths": torch.Tensor([3, 2]),
         }
 
         encoder_features = knn_model_base.extract_sentence_features(net_inputs)
