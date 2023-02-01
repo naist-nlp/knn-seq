@@ -281,7 +281,7 @@ class TranslationKnnTask(TranslationTask):
             return _build_generator(models)
 
         subset_knn = (
-            self.cfg.src_knn_model is not None or self.cfg.src_index_key == "enc"
+            self.cfg.src_knn_model is not None or self.cfg.src_key == "enc"
         )
 
         knn_cuda = torch.cuda.is_available() and not self.cfg.knn_cpu
@@ -325,8 +325,8 @@ class TranslationKnnTask(TranslationTask):
             models.set_index(
                 val,
                 indexes,
-                tgt_topk=self.cfg.knn_topk,
-                tgt_knn_temperature=self.cfg.knn_temperature,
+                knn_topk=self.cfg.knn_topk,
+                knn_temperature=self.cfg.knn_temperature,
                 knn_threshold=self.cfg.knn_threshold,
                 knn_weight=self.cfg.knn_weight,
             )
@@ -337,7 +337,7 @@ class TranslationKnnTask(TranslationTask):
             src_knn_model = None
         else:
             src_knn_model = build_hf_model(
-                self.cfg.src_knn_model, self.cfg.src_index_key
+                self.cfg.src_knn_model, self.cfg.src_key
             )
             if knn_cuda:
                 src_knn_model = src_knn_model.cuda()
@@ -347,12 +347,12 @@ class TranslationKnnTask(TranslationTask):
         src_index_dir = os.path.join(
             data_dir,
             self.cfg.index_dirname,
-            self.cfg.source_lang + "." + self.cfg.src_index_key,
+            self.cfg.source_lang + "." + self.cfg.src_key,
         )
         src_val = TokenStorage.load(src_index_dir)
         src_index_path = os.path.join(
             src_index_dir,
-            f"index.{self.cfg.src_index_key}.{self.cfg.src_index_metric}.bin",
+            f"index.{self.cfg.src_key}.{self.cfg.src_index_metric}.bin",
         )
         src_index = FaissIndex.load(src_index_path)
         src_index.set_nprobe(self.cfg.src_nprobe)
@@ -373,8 +373,8 @@ class TranslationKnnTask(TranslationTask):
             src_knn_model,
             src_val,
             src_index,
-            tgt_topk=self.cfg.knn_topk,
-            tgt_knn_temperature=self.cfg.knn_temperature,
+            knn_topk=self.cfg.knn_topk,
+            knn_temperature=self.cfg.knn_temperature,
             knn_threshold=self.cfg.knn_threshold,
             knn_weight=self.cfg.knn_weight,
             src_topk=self.cfg.src_topk,
