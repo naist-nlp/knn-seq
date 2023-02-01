@@ -35,7 +35,7 @@ def cli_main():
     group = parser.add_argument_group("Preprocessing for kNN")
     # fmt: off
     group.add_argument("--binarize-src", action="store_true",
-                       help="Bianrizes the source senteces.")
+                       help="Only binarizes the source sentences.")
     # fmt: on
     TranslationTask.add_args(parser)
 
