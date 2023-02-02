@@ -262,14 +262,12 @@ class FaissIndex(SearchIndex):
         self.index.train(vectors)
         faiss.ParameterSpace().set_index_parameter(self.index, "verbose", False)
 
-    def add(self, vectors: ndarray, verbose: bool = False) -> None:
+    def add(self, vectors: ndarray) -> None:
         """Adds vectors to the index.
 
         Args:
             vectors (ndarray): indexed vectors.
         """
-        faiss.ParameterSpace().set_index_parameter(self.index, "verbose", verbose)
-
         vectors = self.normalize(vectors)
         return self.index.add(vectors)
 

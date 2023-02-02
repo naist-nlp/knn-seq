@@ -192,6 +192,16 @@ class TestFaissIndex:
         assert faiss_index.is_trained == index.is_trained
         assert faiss_index.is_trained == True
 
+    def test_add(self):
+        vb = np.random.rand(8, D).astype(np.float32)
+        test_idx = 0
+        faiss_index = FaissIndex(faiss.IndexFlat(D), SearchIndexConfig())
+        faiss_index.add(vb)
+        assert len(faiss_index) == vb.shape[0]
+        dist, idx = faiss_index.index.search(vb[test_idx : test_idx + 1], k=1)
+        assert np.isclose(dist[0], 0.0)
+        assert idx[0] == test_idx
+
     @pytest.mark.parametrize(
         ("idmap", "metric"),
         itertools.product(
