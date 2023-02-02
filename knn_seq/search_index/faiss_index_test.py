@@ -218,6 +218,22 @@ class TestFaissIndex:
         else:
             assert np.allclose(np.array(processed_distances), distances)
 
+    @pytest.mark.parametrize("k", [1, 4])
+    def test_query(self, k: int):
+        index = faiss.IndexFlat(D)
+        vb = np.random.rand(8, D).astype(np.float32)
+        q = np.random.rand(2, D).astype(np.float32)
+        index.add(vb)
+        faiss_index = FaissIndex(index, SearchIndexConfig())
+        knn_distances, knn_indices = faiss_index.query(q, k=k)
+
+        distances = ((q[:, None] - vb[None, :]) ** 2).sum(-1)
+        expected_distances, expected_indices = torch.from_numpy(distances).topk(
+            k=k, largest=False
+        )
+        assert np.allclose(knn_distances, expected_distances.numpy())
+        assert np.array_equal(knn_indices, expected_indices.numpy())
+
     @pytest.mark.parametrize("index", mkparams_index())
     def test_clear(self, index):
         faiss_index = FaissIndex(index, SearchIndexConfig())
