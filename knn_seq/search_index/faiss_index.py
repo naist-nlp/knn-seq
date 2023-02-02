@@ -69,7 +69,6 @@ class FaissIndex(SearchIndex):
     Args:
         index (faiss.Index): faiss index.
         config (SearchIndexConfig): search index configuration.
-        nprobe (int): number of searched clusters (default: 16)
     """
 
     METRICS_MAP = {
