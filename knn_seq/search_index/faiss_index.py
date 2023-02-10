@@ -200,26 +200,57 @@ class FaissIndex(SearchIndex):
         return cls(index, config)
 
     def to_gpu_train(self) -> None:
-        """Transfers the faiss index to GPUs for training."""
-        if self.use_pq:
-            index = self.index.index if self.use_opq or self.use_pca else self.index
-            pq = faiss.downcast_index(index).pq
-            assign_index = faiss_index_to_gpu(faiss.IndexFlatL2(pq.dsub), num_gpus=1)
-            pq.assign_index = assign_index
-            if self.use_opq:
-                opq = faiss.downcast_VectorTransform(self.index.chain.at(0))
-                opq.pq = pq
-            self.use_gpu = True
+        """Transfers the faiss index to GPUs for training.
 
+        This speeds up training of IVF clustering and the PQ codebook:
+
+        * IVF learns the nlists centroids by k-means.
+
+        * PQ can be used for two components: OPQ training and vector quantization.
+          - OPQ training: OPQ rotates the input vectors as a pre-transform and the
+              rotation matrix is trained to minimize the PQ reconstruction error. If the
+              ProductQuantizer object is given in OPQ training, it is finally set
+              `ProductQuantizer::Train_hot_start` flag that initializes the codebook by
+              the state in the last iteration of OPQ training.
+          - Vector Quantization: It learns the PQ codes that is actually added to the
+              index. Note that IVFPQ learns codes from residual vectors from each
+              centroid, which are different from OPQ.
+        """
         ivf = self.ivf
         if ivf is not None:
-            dim = (
-                self.config.transform_dim if self.config.transform_dim > 0 else self.dim
-            )
+            # IVF* learns the nlists centroids from d-dimensional vectors.
+            # clustering_index takes `nlists x d` that would be large, so it is sharded.
             clustering_index = faiss_index_to_gpu(
-                faiss.IndexFlat(dim, self.METRICS_MAP[self.metric]), shard=True
+                faiss.IndexFlat(ivf.d, self.METRICS_MAP[self.metric]), shard=True
             )
             ivf.clustering_index = clustering_index
+            self.use_gpu = True
+
+        if self.use_pq:
+            index = self.index.index if self.use_opq or self.use_pca else self.index
+            pq: faiss.ProductQuantizer = faiss.downcast_index(index).pq
+
+            # PQ splits input vectors into dsub-dimensional sub-vectors and assigns
+            # quantization codes in each sub-space. Therefore, a single GPU is used for
+            # PQ assignment because the GPU memory footprint is small (`ksub x dsub`,
+            # where ksub is the codebook size and typically =256).
+            pq.assign_index = faiss_index_to_gpu(faiss.IndexFlatL2(pq.dsub), num_gpus=1)
+            if self.use_opq:
+                opq: faiss.OPQMatrix = faiss.downcast_VectorTransform(
+                    self.index.chain.at(0)
+                )
+                if self.use_ivf:
+                    # IVFPQ learns PQ from the different vectors, so this PQ is not
+                    # shared with IVFPQ.
+                    opq_pq = faiss.ProductQuantizer(opq.d_out, opq.M, pq.nbits)
+                    opq_pq.assign_index = faiss_index_to_gpu(
+                        faiss.IndexFlatL2(opq_pq.dsub), num_gpus=1
+                    )
+                else:
+                    # Otherwise, PQ codes are initialized by the last state of OPQ
+                    # training and PQ training starts from that initialized codebook.
+                    opq_pq = pq
+                opq.pq = opq_pq
             self.use_gpu = True
 
     def to_gpu_add(self) -> None:
