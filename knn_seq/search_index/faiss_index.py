@@ -219,7 +219,8 @@ class FaissIndex(SearchIndex):
         ivf = self.ivf
         if ivf is not None:
             # IVF* learns the nlists centroids from d-dimensional vectors.
-            # clustering_index takes `nlists x d` that would be large, so it is sharded.
+            # clustering_index assignments by computing distance between `nlists x d`
+            # and `ntrain x d` that would be large, so it is sharded.
             clustering_index = faiss_index_to_gpu(
                 faiss.IndexFlat(ivf.d, self.METRICS_MAP[self.metric]), shard=True
             )
@@ -231,9 +232,10 @@ class FaissIndex(SearchIndex):
             pq: faiss.ProductQuantizer = faiss.downcast_index(index).pq
 
             # PQ splits input vectors into dsub-dimensional sub-vectors and assigns
-            # quantization codes in each sub-space. Therefore, a single GPU is used for
-            # PQ assignment because the GPU memory footprint is small (`ksub x dsub`,
-            # where ksub is the codebook size and typically =256).
+            # quantization codes in each sub-space. In addition, PQ is trained from
+            # sampled vectors and all training vectors are not used. Therefore, a single
+            # GPU is used for PQ assignment because the GPU memory footprint is small
+            # (`ksub x dsub`, where ksub is the codebook size and typically =256).
             pq.assign_index = faiss_index_to_gpu(faiss.IndexFlatL2(pq.dsub), num_gpus=1)
             if self.use_opq:
                 opq: faiss.OPQMatrix = faiss.downcast_VectorTransform(
