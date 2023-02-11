@@ -225,12 +225,3 @@ class FaissIndexFast(FaissIndex):
 
         if self.use_opq or self.use_pca:
             self.index.ntotal = index.ntotal
-
-    def ivf_to_gpu(self):
-        ivf_index: faiss.IndexIVF = self.ivf
-        if self.use_hnsw:
-            ivf_index.quantizer = faiss.downcast_index(
-                faiss.downcast_index(ivf_index.quantizer).storage
-            )
-        self.index = faiss_index_to_gpu(self.index, shard=True)
-        self.use_gpu = True
