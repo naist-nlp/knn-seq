@@ -104,15 +104,10 @@ class FaissIndexFast(FaissIndex):
                     ivf_index = self.ivf
                     hnsw_quantizer = faiss.downcast_index(self.ivf.quantizer)
                     ivf_index.quantizer = faiss.downcast_index(hnsw_quantizer.storage)
-                    self.gpu_ivf_index = faiss_index_to_gpu(
-                        ivf_index, shard=True, precompute=True
-                    )
-                    if self.use_hnsw:
-                        ivf_index.quantizer = hnsw_quantizer
+                    self.gpu_ivf_index = faiss_index_to_gpu(ivf_index, shard=True)
+                    ivf_index.quantizer = hnsw_quantizer
                 else:
-                    self.gpu_ivf_index = faiss_index_to_gpu(
-                        self.ivf, shard=True, precompute=True
-                    )
+                    self.gpu_ivf_index = faiss_index_to_gpu(self.ivf, shard=True)
                 self.gpu_ivf_index.reset()
             elif gpu_ivf_cq:
                 coarse_quantizer = self.ivf.quantizer
