@@ -42,6 +42,7 @@ class KNNTransformer(FairseqEncoderDecoderModel):
         decoder_out = self.forward_decoder(
             prev_output_tokens,
             encoder_out=encoder_out,
+            features_only=features_only,
             alignment_layer=alignment_layer,
             alignment_heads=alignment_heads,
             src_lengths=src_lengths,
