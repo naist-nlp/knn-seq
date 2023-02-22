@@ -2,8 +2,14 @@ from typing import List
 
 import pytest
 import torch
+from fairseq.data.language_pair_dataset import collate
 
-from data.fixtures import testdata_models  # pylint: disable=unused-import
+from data.fixtures import (  # pylint: disable=unused-import
+    testdata_langpair_dataset,
+    testdata_models,
+    testdata_src_dict,
+    testdata_tgt_dict,
+)
 from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
 
 
@@ -11,6 +17,12 @@ from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
 def knn_model_base(testdata_models):
     ensemble, _ = testdata_models
     return FairseqKNNModelBase(ensemble)
+
+
+@pytest.fixture(scope="module")
+def generate_test_data(testdata_langpair_dataset):
+    dataset = testdata_langpair_dataset
+    return dataset.collater([dataset[i] for i in range(2)])
 
 
 class TestFairseqKNNModelBase:
@@ -22,15 +34,8 @@ class TestFairseqKNNModelBase:
         ]
         assert embed_dims == expected_embed_dims
 
-    @pytest.mark.parametrize(
-        ("src_tokens", "src_lengths"),
-        [
-            (torch.LongTensor([[4, 5]]), torch.Tensor([2])),
-            (torch.LongTensor([[4, 5, 6], [1, 7, 8]]), torch.Tensor([3, 2])),
-        ],
-    )
     def test_extract_sentence_features_from_encoder_outs(
-        self, testdata_models, knn_model_base, src_tokens, src_lengths
+        self, testdata_models, knn_model_base, generate_test_data
     ) -> None:
         ensemble, _ = testdata_models
 
@@ -42,13 +47,12 @@ class TestFairseqKNNModelBase:
         )
 
         # Encoder out shape test
-        encoder_outs = [
-            model.encoder(
-                src_tokens=src_tokens,
-                src_lengths=src_lengths,
-            )
-            for model in ensemble
-        ]
+        net_inputs = {
+            "src_tokens": generate_test_data["net_input"]["src_tokens"],
+            "src_lengths": generate_test_data["net_input"]["src_lengths"],
+        }
+
+        encoder_outs = [model.encoder(**net_inputs) for model in ensemble]
         sentence_features = knn_model_base.extract_sentence_features_from_encoder_outs(
             encoder_outs
         )
@@ -56,27 +60,25 @@ class TestFairseqKNNModelBase:
 
         expected_feature_sizes: List[List[int]] = [
             [
-                src_tokens.size()[0],
+                net_inputs["src_tokens"].size()[0],
                 model.encoder.embed_tokens.embedding_dim,
             ]
             for model in ensemble
         ]
         assert feature_sizes == expected_feature_sizes
 
-    @pytest.mark.parametrize(
-        ("src_tokens", "src_lengths"),
-        [
-            (torch.LongTensor([[4, 5]]), torch.Tensor([2])),
-            (torch.LongTensor([[4, 5, 6], [1, 7, 8]]), torch.Tensor([3, 2])),
-        ],
-    )
     def test_extract_sentence_features(
-        self, testdata_models, knn_model_base, src_tokens, src_lengths
+        self,
+        testdata_models,
+        knn_model_base,
+        generate_test_data,
     ) -> None:
         ensemble, _ = testdata_models
-        net_inputs = {"src_tokens": src_tokens, "src_lengths": src_lengths}
+        net_inputs = {
+            "src_tokens": generate_test_data["net_input"]["src_tokens"],
+            "src_lengths": generate_test_data["net_input"]["src_lengths"],
+        }
 
-        # encoder_features = knn_model_base.extract_sentence_features(net_inputs)
         encoder_features = knn_model_base.extract_sentence_features(net_inputs)
         feature_sizes = [feature.size() for feature in encoder_features]
 
