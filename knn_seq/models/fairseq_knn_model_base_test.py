@@ -41,6 +41,16 @@ class TestFairseqKNNModelBase:
 
         assert isinstance(knn_model_base.knn_timer, utils.StopwatchMeter)
 
+    def test_set_index(self, knn_model_base) -> None:
+        with pytest.raises(NotImplementedError):
+            knn_model_base.set_index()
+
+    def test_init_model(self, knn_model_base) -> None:
+        for p in knn_model_base.parameters():
+            if getattr(p, "requires_grad", None) is not None:
+                assert p.requires_grad == False
+        assert knn_model_base.training == False
+
     def test_get_embed_dim(self, testdata_models, knn_model_base) -> None:
         ensemble, _ = testdata_models
         embed_dims = knn_model_base.get_embed_dim()
