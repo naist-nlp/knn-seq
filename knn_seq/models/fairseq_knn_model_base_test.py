@@ -2,7 +2,6 @@ from typing import List
 
 import pytest
 import torch
-from fairseq.data.language_pair_dataset import collate
 
 from data.fixtures import (  # pylint: disable=unused-import
     testdata_langpair_dataset,
@@ -10,7 +9,9 @@ from data.fixtures import (  # pylint: disable=unused-import
     testdata_src_dict,
     testdata_tgt_dict,
 )
+from knn_seq import utils
 from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
+from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 
 
 @pytest.fixture(scope="module")
@@ -26,6 +27,20 @@ def generate_test_data(testdata_langpair_dataset):
 
 
 class TestFairseqKNNModelBase:
+    def test__init__(self, knn_model_base) -> None:
+        dictionary = knn_model_base.single_model.decoder.dictionary
+        assert knn_model_base.tgt_dict == dictionary
+        assert knn_model_base.pad == knn_model_base.tgt_dict.pad()
+
+        for m in knn_model_base.wrapped_models:
+            assert isinstance(m, KNNTransformer)
+
+        assert knn_model_base.knn_weight == 0.0
+        assert knn_model_base.knn_threshold == None
+        assert knn_model_base.knn_ensemble == False
+
+        assert isinstance(knn_model_base.knn_timer, utils.StopwatchMeter)
+
     def test_get_embed_dim(self, testdata_models, knn_model_base) -> None:
         ensemble, _ = testdata_models
         embed_dims = knn_model_base.get_embed_dim()
