@@ -27,7 +27,7 @@ class TestFairseqKNNModelBase:
 
         dictionary = knn_model_base.single_model.decoder.dictionary
         assert knn_model_base.tgt_dict == dictionary
-        assert knn_model_base.pad == knn_model_base.tgt_dict.pad()
+        assert knn_model_base.pad == dictionary.pad()
 
         for m in knn_model_base.wrapped_models:
             assert isinstance(m, KNNTransformer)
