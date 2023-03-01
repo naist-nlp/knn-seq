@@ -64,6 +64,22 @@ class TestFairseqKNNModelBase:
         ]
         assert embed_dims == expected_embed_dims
 
+    def test_set_src_sents(self, testdata_models) -> None:
+        ensemble, _ = testdata_models
+        knn_model_base = FairseqKNNModelBase(ensemble)
+
+        src_sents = ["test1", "test2"]
+        knn_model_base.set_src_sents(src_sents)
+        assert knn_model_base.src_sents == src_sents
+
+    def test_set_decoder_beam_size(self, testdata_models) -> None:
+        ensemble, _ = testdata_models
+        knn_model_base = FairseqKNNModelBase(ensemble)
+
+        beam_size = 4
+        knn_model_base.set_decoder_beam_size(beam_size)
+        assert knn_model_base.beam_size == beam_size
+
     def test_extract_sentence_features_from_encoder_outs(
         self, testdata_models, generate_test_data
     ) -> None:
