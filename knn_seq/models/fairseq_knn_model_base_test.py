@@ -1,5 +1,4 @@
 from typing import List
-from attr import has
 
 import pytest
 import torch
