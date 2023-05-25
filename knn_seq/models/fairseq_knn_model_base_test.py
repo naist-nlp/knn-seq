@@ -1,4 +1,5 @@
 from typing import List
+from attr import has
 
 import pytest
 import torch
@@ -9,6 +10,7 @@ from data.fixtures import (  # pylint: disable=unused-import
     testdata_src_dict,
     testdata_tgt_dict,
 )
+from fairseq.sequence_generator import EnsembleModel
 from knn_seq import utils
 from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
 from knn_seq.models.fairseq_knn_transformer import KNNTransformer
@@ -75,9 +77,20 @@ class TestFairseqKNNModelBase:
     def test_set_decoder_beam_size(self, testdata_models) -> None:
         ensemble, _ = testdata_models
         knn_model_base = FairseqKNNModelBase(ensemble)
-
         beam_size = 4
+
+        EnsembleModel(ensemble).set_decoder_beam_size(beam_size)
+        expected_beam_sizes = []
+        for model in ensemble:
+            if hasattr(model, "set_beam_size"):
+                expected_beam_sizes.append(model.set_beam_size(beam_size))
+
         knn_model_base.set_decoder_beam_size(beam_size)
+        beam_sizes = []
+        for model in ensemble:
+            if hasattr(model, "set_beam_size"):
+                beam_sizes.append(model.set_beam_size(beam_size))
+        assert beam_sizes == expected_beam_sizes
         assert knn_model_base.beam_size == beam_size
 
     def test_extract_sentence_features_from_encoder_outs(
