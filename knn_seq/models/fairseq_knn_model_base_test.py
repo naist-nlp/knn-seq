@@ -78,17 +78,18 @@ class TestFairseqKNNModelBase:
         knn_model_base = FairseqKNNModelBase(ensemble)
         beam_size = 4
 
-        EnsembleModel(ensemble).set_decoder_beam_size(beam_size)
+        ensemble_model = EnsembleModel(ensemble)
+        ensemble_model.set_decoder_beam_size(beam_size)
         expected_beam_sizes = []
-        for model in ensemble:
-            if hasattr(model, "set_beam_size"):
-                expected_beam_sizes.append(model.set_beam_size(beam_size))
+        for model in ensemble_model.models:
+            if hasattr(model, "beam_size"):
+                expected_beam_sizes.append(model.beam_size)
 
         knn_model_base.set_decoder_beam_size(beam_size)
         beam_sizes = []
         for model in ensemble:
-            if hasattr(model, "set_beam_size"):
-                beam_sizes.append(model.set_beam_size(beam_size))
+            if hasattr(model, "beam_size"):
+                beam_sizes.append(model.beam_size)
         assert beam_sizes == expected_beam_sizes
         assert knn_model_base.beam_size == beam_size
 
