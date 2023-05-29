@@ -9,7 +9,6 @@ from data.fixtures import (  # pylint: disable=unused-import
     testdata_src_dict,
     testdata_tgt_dict,
 )
-from fairseq.sequence_generator import EnsembleModel
 from knn_seq import utils
 from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
 from knn_seq.models.fairseq_knn_transformer import KNNTransformer
@@ -74,23 +73,21 @@ class TestFairseqKNNModelBase:
         assert knn_model_base.src_sents == src_sents
 
     def test_set_decoder_beam_size(self, testdata_models) -> None:
+        import types
+
+        def set_beam_size(self, beam_size):
+            self.beam_size = beam_size
+
         ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
-        beam_size = 4
-
-        ensemble_model = EnsembleModel(ensemble)
-        ensemble_model.set_decoder_beam_size(beam_size)
-        expected_beam_sizes = []
-        for model in ensemble_model.models:
-            if hasattr(model, "beam_size"):
-                expected_beam_sizes.append(model.beam_size)
-
-        knn_model_base.set_decoder_beam_size(beam_size)
-        beam_sizes = []
         for model in ensemble:
-            if hasattr(model, "beam_size"):
-                beam_sizes.append(model.beam_size)
-        assert beam_sizes == expected_beam_sizes
+            model.set_beam_size = types.MethodType(set_beam_size, model)
+        beamable_ensemble = ensemble
+
+        beam_size = 4
+        knn_model_base = FairseqKNNModelBase(beamable_ensemble)
+        knn_model_base.set_decoder_beam_size(beam_size)
+        for model in ensemble:
+            assert model.beam_size == beam_size
         assert knn_model_base.beam_size == beam_size
 
     def test_extract_sentence_features_from_encoder_outs(
