@@ -2,6 +2,7 @@ from typing import List
 
 import pytest
 import torch
+from fairseq.sequence_generator import EnsembleModel
 
 from data.fixtures import (  # pylint: disable=unused-import
     testdata_langpair_dataset,
@@ -72,19 +73,19 @@ class TestFairseqKNNModelBase:
         knn_model_base.set_src_sents(src_sents)
         assert knn_model_base.src_sents == src_sents
 
-    def test_set_decoder_beam_size(self, testdata_models) -> None:
-        import types
-
-        def set_beam_size(self, beam_size):
-            self.beam_size = beam_size
-
+    def test_set_decoder_beam_size(self, testdata_models, monkeypatch) -> None:
         ensemble, _ = testdata_models
-        for model in ensemble:
-            model.set_beam_size = types.MethodType(set_beam_size, model)
-        beamable_ensemble = ensemble
+
+        def mock_decoder_beam_size(self, beam_size):
+            for model in self.models:
+                model.beam_size = beam_size
+
+        monkeypatch.setattr(
+            EnsembleModel, "set_decoder_beam_size", mock_decoder_beam_size
+        )
 
         beam_size = 4
-        knn_model_base = FairseqKNNModelBase(beamable_ensemble)
+        knn_model_base = FairseqKNNModelBase(ensemble)
         knn_model_base.set_decoder_beam_size(beam_size)
         for model in ensemble:
             assert model.beam_size == beam_size
