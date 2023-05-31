@@ -1,8 +1,8 @@
 from typing import List
+from unittest.mock import patch
 
 import pytest
 import torch
-from fairseq.sequence_generator import EnsembleModel
 
 from data.fixtures import (  # pylint: disable=unused-import
     testdata_langpair_dataset,
@@ -73,22 +73,27 @@ class TestFairseqKNNModelBase:
         knn_model_base.set_src_sents(src_sents)
         assert knn_model_base.src_sents == src_sents
 
-    def test_set_decoder_beam_size(self, testdata_models, monkeypatch) -> None:
+    @staticmethod
+    @pytest.fixture
+    def mock_ensemble(testdata_models):
+        import types
+
+        def set_beam_size(self, beam_size):
+            self.beam_size = beam_size
+
         ensemble, _ = testdata_models
-
-        def mock_decoder_beam_size(self, beam_size):
-            for model in self.models:
-                model.beam_size = beam_size
-
-        monkeypatch.setattr(
-            EnsembleModel, "set_decoder_beam_size", mock_decoder_beam_size
-        )
-
-        beam_size = 4
-        knn_model_base = FairseqKNNModelBase(ensemble)
-        knn_model_base.set_decoder_beam_size(beam_size)
         for model in ensemble:
+            model.set_beam_size = types.MethodType(set_beam_size, model)
+            patch.object(model, "set_beam_size", set_beam_size)
+            return ensemble
+
+    def test_set_decoder_beam_size(self, mock_ensemble) -> None:
+        beam_size = 4
+        knn_model_base = FairseqKNNModelBase(mock_ensemble)
+        knn_model_base.set_decoder_beam_size(beam_size)
+        for model in mock_ensemble:
             assert model.beam_size == beam_size
+            delattr(model, "set_beam_size")
         assert knn_model_base.beam_size == beam_size
 
     def test_extract_sentence_features_from_encoder_outs(
