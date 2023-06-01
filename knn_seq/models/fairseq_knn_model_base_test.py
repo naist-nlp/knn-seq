@@ -2,6 +2,7 @@ from typing import List
 
 import pytest
 import torch
+import torch.nn as nn
 
 from data.fixtures import (  # pylint: disable=unused-import
     testdata_langpair_dataset,
@@ -18,6 +19,11 @@ from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 def generate_test_data(testdata_langpair_dataset):
     dataset = testdata_langpair_dataset
     return dataset.collater([dataset[i] for i in range(2)])
+
+
+class BeamableModel(nn.Module):
+    def set_beam_size(self, beam_size):
+        self.beam_size = beam_size
 
 
 class TestFairseqKNNModelBase:
@@ -63,6 +69,26 @@ class TestFairseqKNNModelBase:
             model.decoder.embed_tokens.embedding_dim for model in ensemble
         ]
         assert embed_dims == expected_embed_dims
+
+    def test_set_src_sents(self, testdata_models) -> None:
+        ensemble, _ = testdata_models
+        knn_model_base = FairseqKNNModelBase(ensemble)
+
+        src_sents = ["test1", "test2"]
+        knn_model_base.set_src_sents(src_sents)
+        assert knn_model_base.src_sents == src_sents
+
+    def test_set_decoder_beam_size(self, testdata_models) -> None:
+        ensemble, _ = testdata_models
+
+        beamable_model = BeamableModel()
+        ensemble_with_beamable_model = ensemble + [beamable_model]
+
+        beam_size = 4
+        knn_model_base = FairseqKNNModelBase(ensemble_with_beamable_model)
+        knn_model_base.set_decoder_beam_size(beam_size)
+        assert beamable_model.beam_size == beam_size
+        assert knn_model_base.beam_size == beam_size
 
     def test_extract_sentence_features_from_encoder_outs(
         self, testdata_models, generate_test_data
