@@ -25,7 +25,8 @@ class BeamableModel(nn.Module):
     def set_beam_size(self, beam_size):
         self.beam_size = beam_size
 
-def search(self, queries, index_id = 0):
+
+def search(self, queries, index_id=0):
     batch_size = 2
     k = 2
     scores = torch.rand(batch_size, k)
