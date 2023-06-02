@@ -90,6 +90,47 @@ class TestFairseqKNNModelBase:
         assert beamable_model.beam_size == beam_size
         assert knn_model_base.beam_size == beam_size
 
+    @pytest.mark.parametrize("output_encoder_features", [True, False])
+    def test_forward(
+        self, testdata_models, generate_test_data, output_encoder_features
+    ) -> None:
+        ensemble, _ = testdata_models
+        knn_model_base = FairseqKNNModelBase(ensemble)
+
+        if output_encoder_features:
+            net_inputs = {
+                "src_tokens": generate_test_data["net_input"]["src_tokens"],
+                "src_lengths": generate_test_data["net_input"]["src_lengths"],
+            }
+            features = knn_model_base(
+                **net_inputs, output_encoder_features=output_encoder_features
+            )
+            feature_sizes = [feature.size() for feature in features]
+
+            expected_features = knn_model_base.extract_sentence_features(net_inputs)
+            expected_sizes = [feature.size() for feature in expected_features]
+            assert feature_sizes == expected_sizes
+        else:
+            net_inputs = {
+                "src_tokens": generate_test_data["net_input"]["src_tokens"],
+                "src_lengths": generate_test_data["net_input"]["src_lengths"],
+                "prev_output_tokens": generate_test_data["net_input"][
+                    "prev_output_tokens"
+                ],
+            }
+            features = knn_model_base(**net_inputs)
+            feature_sizes = [feature.size() for feature in features]
+
+            decoder_outputs = [
+                model(**net_inputs, features_only=True)
+                for model in knn_model_base.wrapped_models
+            ]
+            expected_features = [
+                decoder_out[1]["features"][0] for decoder_out in decoder_outputs
+            ]
+            expected_sizes = [feature.size() for feature in expected_features]
+            assert feature_sizes == expected_sizes
+
     def test_extract_sentence_features_from_encoder_outs(
         self, testdata_models, generate_test_data
     ) -> None:
