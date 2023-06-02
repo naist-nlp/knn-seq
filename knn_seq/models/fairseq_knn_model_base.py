@@ -251,11 +251,12 @@ class FairseqKNNModelBase(EnsembleModel):
                         attn = attn_holder
                     elif attn_holder is not None:
                         attn = attn_holder[0]
+
+                    if self.knn_ensemble or i == 0:
+                        knn_querys = decoder_out[1]["features"][0][:, -1, :]
+
                 if attn is not None:
                     attn = attn[:, -1, :]
-
-                if self.knn_ensemble or i == 0:
-                    knn_querys = decoder_out[1]["features"][0][:, -1, :]
 
             decoder_out_tuple = (
                 decoder_out[0][:, -1:, :].div_(temperature),
@@ -295,7 +296,7 @@ class FairseqKNNModelBase(EnsembleModel):
         if knn_querys is not None and not self.knn_ensemble:
             lprobs, knn_output = self.add_knn_probs(lprobs, knn_querys)
 
-        if return_retrieved:
+        if return_retrieved and knn_querys is not None:
             return lprobs, attn, knn_output.scores, knn_output.indices
 
         return lprobs, attn
