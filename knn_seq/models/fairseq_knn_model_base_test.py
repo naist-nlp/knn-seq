@@ -25,6 +25,14 @@ class BeamableModel(nn.Module):
     def set_beam_size(self, beam_size):
         self.beam_size = beam_size
 
+def search(self, queries, index_id = 0):
+    batch_size = 2
+    k = 2
+    scores = torch.rand(batch_size, k)
+    probs = torch.rand(batch_size, k)
+    indices = torch.zeros(batch_size, k, dtype=torch.long)
+    return FairseqKNNModelBase.KNNOutput(scores, probs, indices)
+
 
 class TestFairseqKNNModelBase:
     def test__init__(self, testdata_models) -> None:
@@ -146,3 +154,58 @@ class TestFairseqKNNModelBase:
             torch.zeros(src_num, embed_dim).size() for embed_dim in embed_dims
         ]
         assert feature_sizes == expected_feature_sizes
+
+    def test_search(self, testdata_models) -> None:
+        ensemble, _ = testdata_models
+        knn_model_base = FairseqKNNModelBase(ensemble)
+
+        batch_size = 2
+        embed_dim = 16
+        queries = torch.rand(batch_size, embed_dim)
+        with pytest.raises(NotImplementedError):
+            knn_model_base.search(queries)
+
+    @pytest.mark.parametrize("knn_threshold", [torch.zeros(2), None])
+    def test_add_knn_probs(self, knn_threshold, testdata_models, monkeypatch) -> None:
+        ensemble, _ = testdata_models
+        knn_model_base = FairseqKNNModelBase(ensemble)
+
+        batch_size = 2
+        vocab_size = 20
+        embed_dim = 16
+        test_lprobs = torch.rand(batch_size, vocab_size)
+        test_queries = torch.rand(batch_size, embed_dim)
+
+        monkeypatch.setattr(FairseqKNNModelBase, "search", search)
+        expected_knn_output = knn_model_base.search(test_queries)
+        knn_probs = expected_knn_output.probs
+
+        knn_vocab_probs = knn_probs.new_zeros(*test_lprobs.size())
+        knn_vocab_probs = knn_vocab_probs.scatter_add_(
+            dim=-1, index=expected_knn_output.indices, src=knn_probs
+        )
+        knn_vocab_probs *= knn_model_base.knn_weight
+        knn_vocab_probs[:, knn_model_base.pad] = 0.0
+
+        probs = torch.exp(test_lprobs)
+
+        knn_model_base.knn_threshold = knn_threshold
+        lprobs, knn_output = knn_model_base.add_knn_probs(test_lprobs, test_queries)
+
+        assert knn_model_base.knn_timer.start_time is not None
+        assert knn_model_base.knn_timer.stop_time is not None
+
+        if knn_model_base.knn_threshold is not None:
+            max_scores = torch.max(expected_knn_output.scores, dim=1).values
+            update_batch_indices = max_scores.gt(knn_model_base.knn_threshold)
+            probs[update_batch_indices] = (1.0 - knn_model_base.knn_weight) * probs[
+                update_batch_indices
+            ] + knn_vocab_probs[update_batch_indices]
+        else:
+            probs = (1.0 - knn_model_base.knn_weight) * probs + knn_vocab_probs
+        expected_lprobs = torch.log(probs)
+
+        assert lprobs.shape == expected_lprobs.shape
+        assert knn_output.scores.shape == expected_knn_output.scores.shape
+        assert knn_output.probs.shape == expected_knn_output.probs.shape
+        assert knn_output.indices.shape == expected_knn_output.indices.shape
