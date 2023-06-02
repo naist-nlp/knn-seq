@@ -1,8 +1,10 @@
-from typing import List
+import math
+from typing import Any, Dict, List, Optional
 
 import pytest
 import torch
 import torch.nn as nn
+from torch import Tensor
 
 from data.fixtures import (  # pylint: disable=unused-import
     testdata_langpair_dataset,
@@ -251,3 +253,119 @@ class TestFairseqKNNModelBase:
         assert knn_output.scores.shape == expected_knn_output.scores.shape
         assert knn_output.probs.shape == expected_knn_output.probs.shape
         assert knn_output.indices.shape == expected_knn_output.indices.shape
+
+    @pytest.mark.parametrize("is_knn_ensemble", [True, False])
+    @pytest.mark.parametrize("has_incremental", [True, False])
+    @pytest.mark.parametrize("return_retrieved", [True, False])
+    @pytest.mark.parametrize("has_multiple_models", [True, False])
+    def test_forward_decoder(
+        self,
+        generate_test_data,
+        testdata_models,
+        has_multiple_models,
+        return_retrieved,
+        has_incremental,
+        is_knn_ensemble,
+        monkeypatch,
+    ) -> None:
+        ensemble, _ = testdata_models
+
+        if has_multiple_models:
+            ensemble = ensemble * 2
+        knn_model_base = FairseqKNNModelBase(ensemble)
+
+        net_inputs = {
+            "src_tokens": generate_test_data["net_input"]["src_tokens"],
+            "src_lengths": generate_test_data["net_input"]["src_lengths"],
+        }
+
+        encoder_outs = [model.encoder(**net_inputs) for model in ensemble]
+        tokens = generate_test_data["net_input"]["prev_output_tokens"]
+
+        log_probs = []
+        avg_attn = None
+        encoder_out = None
+        knn_queries = None
+        temperature = 1.0
+        attn = None
+
+        incremental_states = torch.jit.annotate(
+            List[Dict[str, Dict[str, Optional[Tensor]]]],
+            [
+                torch.jit.annotate(Dict[str, Dict[str, Optional[Tensor]]], {})
+                for i in range(knn_model_base.models_size)
+            ],
+        )
+        monkeypatch.setattr(FairseqKNNModelBase, "search", search)
+
+        knn_model_base.has_incremental = has_incremental
+        for i, model in enumerate(knn_model_base.wrapped_models):
+            if knn_model_base.has_encoder():
+                encoder_out = encoder_outs[i]
+            if knn_model_base.has_incremental_states():
+                decoder_out = model.forward_decoder(
+                    tokens,
+                    encoder_out=encoder_out,
+                    incremental_state=incremental_states[i],
+                )
+            else:
+                decoder_out = model.forward_decoder(tokens, encoder_out=encoder_out)
+
+            knn_model_base.knn_ensemble = is_knn_ensemble
+            attn = decoder_out[1]["attn"][0]
+            if knn_model_base.knn_ensemble or i == 0:
+                knn_queries = decoder_out[1]["features"][0][:, -1, :]
+            if attn is not None:
+                attn = attn[:, -1, :]
+
+            decoder_out_tuple = (
+                decoder_out[0][:, -1:, :].div_(temperature),
+                decoder_out[1],
+            )
+            lprobs: Tensor = model.get_normalized_probs(
+                decoder_out_tuple, log_probs=True, sample=None
+            )
+            lprobs = lprobs[:, -1, :]
+
+            if knn_queries is not None and knn_model_base.knn_ensemble:
+                lprobs, knn_output = knn_model_base.add_knn_probs(
+                    lprobs, knn_queries, index_id=i
+                )
+
+            if knn_model_base.models_size == 1:
+                break
+
+            log_probs.append(lprobs)
+            if attn is not None:
+                if avg_attn is None:
+                    avg_attn = attn
+                else:
+                    avg_attn.add_(attn)
+
+        if knn_model_base.models_size > 1:
+            avg_lprobs = torch.logsumexp(
+                torch.stack(log_probs, dim=0), dim=0
+            ) - math.log(knn_model_base.models_size)
+
+            if avg_attn is not None:
+                avg_attn.div_(knn_model_base.models_size)
+
+            lprobs = avg_lprobs
+            attn = avg_attn
+
+        if knn_queries is not None and not knn_model_base.knn_ensemble:
+            lprobs, knn_output = knn_model_base.add_knn_probs(lprobs, knn_queries)
+
+        results = knn_model_base.forward_decoder(
+            tokens, encoder_outs, incremental_states, return_retrieved=return_retrieved
+        )
+        if return_retrieved:
+            assert len(results) == 4
+            assert results[0].shape == lprobs.shape
+            assert results[1].shape == attn.shape
+            assert results[2].shape == knn_output.scores.shape
+            assert results[3].shape == knn_output.indices.shape
+        else:
+            assert len(results) == 2
+            assert results[0].shape == lprobs.shape
+            assert results[1].shape == attn.shape
