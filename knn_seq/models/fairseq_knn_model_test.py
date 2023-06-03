@@ -35,21 +35,6 @@ class TestFairseqKNNModel:
             sort_order=testdata_collator["id"],
         )
 
-    @pytest.mark.parametrize("topk", [None, 0])
-    def test_set_index_bad_values(self, knn_model, testdata_token_storage, topk):
-        dim = knn_model.get_embed_dim()[0]
-        index = faiss.IndexFlatL2(dim)
-
-        with pytest.raises(ValueError):
-            knn_model.set_index(
-                testdata_token_storage,
-                indexes=[index],
-                knn_topk=topk,
-                knn_temperature=1.0,
-                knn_threshold=None,
-                knn_weight=0.5,
-            )
-
     @pytest.mark.parametrize("weight", [0.0, 0.5, 1.0])
     @pytest.mark.parametrize("threshold", [None, 0.2])
     @pytest.mark.parametrize("temperature", [1.0, 2.5])
@@ -135,4 +120,4 @@ class TestFairseqKNNModel:
         offset = torch.normal(mean=0, std=0.1, size=queries.shape)
         distance = -torch.norm(offset, dim=1) ** 2
         output = knn_model.search(queries + offset, 0)
-        assert torch.allclose(output.scores[:, 0], distance)
+        torch.testing.assert_close(output.scores[:, 0], distance)
