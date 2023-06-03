@@ -75,6 +75,7 @@ class TestFairseqKNNModel:
         temperature,
         weight,
     ):
+        torch.manual_seed(0)
         queries_to_test = 4
 
         ensemble, _ = testdata_models
