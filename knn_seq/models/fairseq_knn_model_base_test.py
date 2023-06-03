@@ -15,6 +15,14 @@ from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
 from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 
 
+class FairseqKNNMockModel(FairseqKNNModelBase):
+    def set_index(self):
+        pass
+
+    def search(self, querys: torch.Tensor, index_id: int = 0):
+        pass
+
+
 @pytest.fixture(scope="module")
 def generate_test_data(testdata_langpair_dataset):
     dataset = testdata_langpair_dataset
@@ -38,7 +46,7 @@ def search(self, queries, index_id=0):
 class TestFairseqKNNModelBase:
     def test__init__(self, testdata_models) -> None:
         ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
+        knn_model_base = FairseqKNNMockModel(ensemble)
 
         dictionary = knn_model_base.single_model.decoder.dictionary
         assert knn_model_base.tgt_dict == dictionary
@@ -53,16 +61,9 @@ class TestFairseqKNNModelBase:
 
         assert isinstance(knn_model_base.knn_timer, utils.StopwatchMeter)
 
-    def test_set_index(self, testdata_models) -> None:
-        ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
-
-        with pytest.raises(NotImplementedError):
-            knn_model_base.set_index()
-
     def test_init_model(self, testdata_models) -> None:
         ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
+        knn_model_base = FairseqKNNMockModel(ensemble)
 
         for p in knn_model_base.parameters():
             if getattr(p, "requires_grad", None) is not None:
@@ -71,7 +72,7 @@ class TestFairseqKNNModelBase:
 
     def test_get_embed_dim(self, testdata_models) -> None:
         ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
+        knn_model_base = FairseqKNNMockModel(ensemble)
 
         embed_dims = knn_model_base.get_embed_dim()
         expected_embed_dims = [
@@ -81,7 +82,7 @@ class TestFairseqKNNModelBase:
 
     def test_set_src_sents(self, testdata_models) -> None:
         ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
+        knn_model_base = FairseqKNNMockModel(ensemble)
 
         src_sents = ["test1", "test2"]
         knn_model_base.set_src_sents(src_sents)
@@ -94,7 +95,7 @@ class TestFairseqKNNModelBase:
         ensemble_with_beamable_model = ensemble + [beamable_model]
 
         beam_size = 4
-        knn_model_base = FairseqKNNModelBase(ensemble_with_beamable_model)
+        knn_model_base = FairseqKNNMockModel(ensemble_with_beamable_model)
         knn_model_base.set_decoder_beam_size(beam_size)
         assert beamable_model.beam_size == beam_size
         assert knn_model_base.beam_size == beam_size
@@ -104,7 +105,7 @@ class TestFairseqKNNModelBase:
         self, testdata_models, generate_test_data, output_encoder_features
     ) -> None:
         ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
+        knn_model_base = FairseqKNNMockModel(ensemble)
 
         if output_encoder_features:
             net_inputs = {
@@ -144,7 +145,7 @@ class TestFairseqKNNModelBase:
         self, testdata_models, generate_test_data
     ) -> None:
         ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
+        knn_model_base = FairseqKNNMockModel(ensemble)
 
         # Optionality test
         encoder_outs = None
@@ -180,7 +181,7 @@ class TestFairseqKNNModelBase:
         generate_test_data,
     ) -> None:
         ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
+        knn_model_base = FairseqKNNMockModel(ensemble)
 
         net_inputs = {
             "src_tokens": generate_test_data["net_input"]["src_tokens"],
@@ -197,20 +198,10 @@ class TestFairseqKNNModelBase:
         ]
         assert feature_sizes == expected_feature_sizes
 
-    def test_search(self, testdata_models) -> None:
-        ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
-
-        batch_size = 2
-        embed_dim = 16
-        queries = torch.rand(batch_size, embed_dim)
-        with pytest.raises(NotImplementedError):
-            knn_model_base.search(queries)
-
     @pytest.mark.parametrize("knn_threshold", [torch.zeros(2), None])
     def test_add_knn_probs(self, knn_threshold, testdata_models, monkeypatch) -> None:
         ensemble, _ = testdata_models
-        knn_model_base = FairseqKNNModelBase(ensemble)
+        knn_model_base = FairseqKNNMockModel(ensemble)
 
         batch_size = 2
         vocab_size = 20
@@ -218,7 +209,7 @@ class TestFairseqKNNModelBase:
         test_lprobs = torch.rand(batch_size, vocab_size)
         test_queries = torch.rand(batch_size, embed_dim)
 
-        monkeypatch.setattr(FairseqKNNModelBase, "search", search)
+        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
         expected_knn_output = knn_model_base.search(test_queries)
         knn_probs = expected_knn_output.probs
 

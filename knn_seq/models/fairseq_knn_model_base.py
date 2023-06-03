@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 import logging
 import math
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 logger = logging.getLogger(__name__)
 
 
-class FairseqKNNModelBase(EnsembleModel):
+class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
     """A base wrapper for kNN-MT."""
 
     def __init__(
@@ -43,9 +44,9 @@ class FairseqKNNModelBase(EnsembleModel):
 
         self.knn_timer = utils.StopwatchMeter()
 
+    @abc.abstractmethod
     def set_index(self, *args, **kwargs) -> None:
         """Set the search index."""
-        raise NotImplementedError
 
     def init_model(self) -> None:
         for p in self.parameters():
@@ -164,6 +165,7 @@ class FairseqKNNModelBase(EnsembleModel):
         indices: LongTensor
         uniq_indices: Optional[LongTensor] = None
 
+    @abc.abstractmethod
     def search(self, querys: Tensor, index_id: int = 0) -> KNNOutput:
         """Search k-nearest-neighbors.
 
@@ -174,7 +176,6 @@ class FairseqKNNModelBase(EnsembleModel):
         Output:
             KNNOutput: A kNN output object.
         """
-        raise NotImplementedError
 
     def add_knn_probs(
         self, lprobs: Tensor, querys: Tensor, index_id: int = 0
