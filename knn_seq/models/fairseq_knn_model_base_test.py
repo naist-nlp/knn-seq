@@ -1,5 +1,5 @@
 import math
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import pytest
 import torch
@@ -247,14 +247,12 @@ class TestFairseqKNNModelBase:
 
     @pytest.mark.parametrize("is_knn_ensemble", [True, False])
     @pytest.mark.parametrize("has_incremental", [True, False])
-    @pytest.mark.parametrize("return_retrieved", [True, False])
     @pytest.mark.parametrize("has_multiple_models", [True, False])
-    def test_forward_decoder(
+    def test_forward_decoder_with_knn(
         self,
         generate_test_data,
         testdata_models,
         has_multiple_models,
-        return_retrieved,
         has_incremental,
         is_knn_ensemble,
         monkeypatch,
@@ -263,7 +261,7 @@ class TestFairseqKNNModelBase:
 
         if has_multiple_models:
             ensemble = ensemble * 2
-        knn_model_base = FairseqKNNModelBase(ensemble)
+        knn_model_base = FairseqKNNMockModel(ensemble)
 
         net_inputs = {
             "src_tokens": generate_test_data["net_input"]["src_tokens"],
@@ -287,7 +285,7 @@ class TestFairseqKNNModelBase:
                 for i in range(knn_model_base.models_size)
             ],
         )
-        monkeypatch.setattr(FairseqKNNModelBase, "search", search)
+        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
 
         knn_model_base.has_incremental = has_incremental
         for i, model in enumerate(knn_model_base.wrapped_models):
@@ -318,7 +316,7 @@ class TestFairseqKNNModelBase:
             )
             lprobs = lprobs[:, -1, :]
 
-            if knn_queries is not None and knn_model_base.knn_ensemble:
+            if knn_model_base.knn_ensemble:
                 lprobs, knn_output = knn_model_base.add_knn_probs(
                     lprobs, knn_queries, index_id=i
                 )
@@ -344,19 +342,40 @@ class TestFairseqKNNModelBase:
             lprobs = avg_lprobs
             attn = avg_attn
 
-        if knn_queries is not None and not knn_model_base.knn_ensemble:
+        if not knn_model_base.knn_ensemble:
             lprobs, knn_output = knn_model_base.add_knn_probs(lprobs, knn_queries)
+        expected_lprobs = lprobs
+        expected_attn = attn
+        expected_knn_output = knn_output
 
-        results = knn_model_base.forward_decoder(
-            tokens, encoder_outs, incremental_states, return_retrieved=return_retrieved
+        lprobs, attn, knn_output = knn_model_base.forward_decoder_with_knn(tokens, encoder_outs, incremental_states)
+        assert lprobs.shape == expected_lprobs.shape
+        assert attn.shape == expected_attn.shape
+        assert knn_output.scores.shape == expected_knn_output.scores.shape
+        assert knn_output.probs.shape == expected_knn_output.probs.shape
+        assert knn_output.indices.shape == expected_knn_output.indices.shape
+
+    def test_forward_decoder(self, generate_test_data, testdata_models, monkeypatch):
+        ensemble, _ = testdata_models
+        knn_model_base = FairseqKNNMockModel(ensemble)
+
+        net_inputs = {
+            "src_tokens": generate_test_data["net_input"]["src_tokens"],
+            "src_lengths": generate_test_data["net_input"]["src_lengths"],
+        }
+
+        tokens = generate_test_data["net_input"]["prev_output_tokens"]
+        encoder_outs = [model.encoder(**net_inputs) for model in ensemble]
+        incremental_states = torch.jit.annotate(
+            List[Dict[str, Dict[str, Optional[Tensor]]]],
+            [
+                torch.jit.annotate(Dict[str, Dict[str, Optional[Tensor]]], {})
+                for i in range(knn_model_base.models_size)
+            ],
         )
-        if return_retrieved:
-            assert len(results) == 4
-            assert results[0].shape == lprobs.shape
-            assert results[1].shape == attn.shape
-            assert results[2].shape == knn_output.scores.shape
-            assert results[3].shape == knn_output.indices.shape
-        else:
-            assert len(results) == 2
-            assert results[0].shape == lprobs.shape
-            assert results[1].shape == attn.shape
+        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
+
+        expected_lprobs, expected_attn, _ = knn_model_base.forward_decoder_with_knn(tokens, encoder_outs, incremental_states)
+        lprobs, attn = knn_model_base.forward_decoder(tokens, encoder_outs, incremental_states)
+        assert lprobs.shape == expected_lprobs.shape
+        assert attn.shape == expected_attn.shape
