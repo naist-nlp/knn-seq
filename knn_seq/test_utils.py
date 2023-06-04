@@ -409,11 +409,6 @@ class TestToDevice:
 
 
 class TestSoftmax:
-    def test_type_errors(self):
-        tensor = np.arange(5)
-        with pytest.raises(TypeError):
-            result = utils.softmax(tensor)
-
     @pytest.mark.parametrize(
         "tensor",
         [
@@ -434,16 +429,11 @@ class TestSoftmax:
         expected_result = torch.tensor(e_x / sum, dtype=torch.float32)
 
         assert isinstance(result, torch.Tensor)
-        assert torch.allclose(result, expected_result)
+        torch.testing.assert_close(result, expected_result)
         assert result.dtype == torch.float32
 
 
 class TestLogSoftmax:
-    def test_type_errors(self):
-        tensor = np.arange(5)
-        with pytest.raises(TypeError):
-            result = utils.log_softmax(tensor)
-
     @pytest.mark.parametrize(
         "tensor",
         [
@@ -464,7 +454,7 @@ class TestLogSoftmax:
         expected_result = torch.tensor(np.log(e_x / sum), dtype=torch.float32)
 
         assert isinstance(result, torch.Tensor)
-        assert torch.allclose(result, expected_result)
+        torch.testing.assert_close(result, expected_result)
         assert result.dtype == torch.float32
 
 

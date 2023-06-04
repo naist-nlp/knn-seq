@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 import logging
 import math
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 logger = logging.getLogger(__name__)
 
 
-class FairseqKNNModelBase(EnsembleModel):
+class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
     """A base wrapper for kNN-MT."""
 
     def __init__(
@@ -43,9 +44,9 @@ class FairseqKNNModelBase(EnsembleModel):
 
         self.knn_timer = utils.StopwatchMeter()
 
+    @abc.abstractmethod
     def set_index(self, *args, **kwargs) -> None:
         """Set the search index."""
-        raise NotImplementedError
 
     def init_model(self) -> None:
         for p in self.parameters():
@@ -164,6 +165,7 @@ class FairseqKNNModelBase(EnsembleModel):
         indices: LongTensor
         uniq_indices: Optional[LongTensor] = None
 
+    @abc.abstractmethod
     def search(self, querys: Tensor, index_id: int = 0) -> KNNOutput:
         """Search k-nearest-neighbors.
 
@@ -174,7 +176,6 @@ class FairseqKNNModelBase(EnsembleModel):
         Output:
             KNNOutput: A kNN output object.
         """
-        raise NotImplementedError
 
     def add_knn_probs(
         self, lprobs: Tensor, querys: Tensor, index_id: int = 0
@@ -214,19 +215,33 @@ class FairseqKNNModelBase(EnsembleModel):
         self.knn_timer.stop()
         return lprobs, knn_output
 
-    def forward_decoder(
+    def forward_decoder_with_knn(
         self,
-        tokens,
+        tokens: Tensor,
         encoder_outs: List[Dict[str, List[Tensor]]],
         incremental_states: List[Dict[str, Dict[str, Optional[Tensor]]]],
         temperature: float = 1.0,
-        return_retrieved: bool = False,
-    ):
+    ) -> Tuple[Tensor, Tensor, "FairseqKNNModelBase.KNNOutput"]:
+        """Forwards a decoder with kNN search.
+
+        This method is called from `self.forward_decoder()` in `SequenceGenerator`.
+
+        Args:
+            tokens (Tensor): Tokens tensor of shape `(bbsz, tgt_len)`.
+            encoder_outs (List[Dict[str, List[Tensor]]]): Encoder outputs.
+            incremental_states (List[Dict[str, Dict[str, Optional[Tensor]]]]): Fairseq incremental state objects.
+            temperature (float): Temperature for multiple model ensemble.
+
+        Returns:
+            - Tensor: Log probability tensor of shape `(bbsz, vocab_size)`.
+            - Tensor: Attention weight tensor of shape `(bbsz, src_len)`.
+            - FairseqKNNModelBase.KNNOutput: kNN outputs.
+        """
         # Ensemble MT outputs
         log_probs = []
         avg_attn: Optional[Tensor] = None
         encoder_out: Optional[Dict[str, List[Tensor]]] = None
-        knn_querys: Optional[Tensor] = None
+        knn_querys: Tensor
         for i, model in enumerate(self.wrapped_models):
             if self.has_encoder():
                 encoder_out = encoder_outs[i]
@@ -267,7 +282,7 @@ class FairseqKNNModelBase(EnsembleModel):
             lprobs = lprobs[:, -1, :]
 
             # kNN-MT
-            if knn_querys is not None and self.knn_ensemble:
+            if self.knn_ensemble:
                 lprobs, knn_output = self.add_knn_probs(lprobs, knn_querys, index_id=i)
 
             if self.models_size == 1:
@@ -292,10 +307,31 @@ class FairseqKNNModelBase(EnsembleModel):
             attn = avg_attn
 
         # kNN-MT
-        if knn_querys is not None and not self.knn_ensemble:
+        if not self.knn_ensemble:
             lprobs, knn_output = self.add_knn_probs(lprobs, knn_querys)
 
-        if return_retrieved:
-            return lprobs, attn, knn_output.scores, knn_output.indices
+        return lprobs, attn, knn_output
 
+    def forward_decoder(
+        self,
+        tokens: Tensor,
+        encoder_outs: List[Dict[str, List[Tensor]]],
+        incremental_states: List[Dict[str, Dict[str, Optional[Tensor]]]],
+        temperature: float = 1.0,
+    ) -> Tuple[Tensor, Tensor]:
+        """Forwards a decoder.
+
+        This method is called in the `SequenceGenerator` class.
+
+        Args:
+            tokens (Tensor): Tokens tensor of shape `(bbsz, tgt_len)`.
+            encoder_outs (List[Dict[str, List[Tensor]]]): Encoder outputs.
+            incremental_states (List[Dict[str, Dict[str, Optional[Tensor]]]]): Fairseq incremental state objects.
+            temperature (float): Temperature for multiple model ensemble.
+
+        Returns:
+            - Tensor: Log probability tensor of shape `(bbsz, vocab_size)`.
+            - Tensor: Attention weight tensor of shape `(bbsz, src_len)`.
+        """
+        lprobs, attn, knn_output = self.forward_decoder_with_knn(tokens, encoder_outs, incremental_states, temperature)
         return lprobs, attn
