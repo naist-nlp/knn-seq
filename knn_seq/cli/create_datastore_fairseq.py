@@ -64,7 +64,7 @@ def main(args: Namespace):
             model.cuda()
         model.prepare_for_inference_(cfg)
 
-    model = FairseqKNNModel(models, key=task.cfg.tgt_index_key)
+    model = FairseqKNNModel(models, key=task.cfg.knn_key)
     if use_cuda:
         model = model.cuda()
         if cfg.common.fp16:
@@ -83,7 +83,7 @@ def main(args: Namespace):
     datastore_fnames = [
         "datastore{}.{}.bin".format(
             "" if i == 0 else i,
-            task.cfg.src_index_key if args.store_src_sent else task.cfg.tgt_index_key,
+            task.cfg.src_index_key if args.store_src_sent else task.cfg.knn_key,
         )
         for i in range(len(models))
     ]

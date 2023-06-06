@@ -45,8 +45,6 @@ Next, create the datastore by computing all key vectors.
 .. code:: bash
 
     python knn_seq/cli/create_datastore_fairseq.py \
-        --user-dir knn_seq/ \
-        --task translation_knn \
         --knn-key ffn_in \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
         --save-freq 512 \
@@ -99,8 +97,8 @@ Last, generate sentences with kNN.
         --beam 5 \
         --knn-key ffn_in \
         --knn-metric l2 \
-        --knn-topk 16 \  # The number of nearest neighbors.
-        --knn-nprobe 64 \ # The number of nearest centroids for IVF search.
+        --knn-topk 64 \  # The number of nearest neighbors.
+        --knn-nprobe 32 \ # The number of nearest centroids for IVF search.
         --knn-temperature 100.0 \  # Temperature of kNN softmax.
         --knn-weight 0.5 \  # kNN-MT interpolation parameter.
         --knn-fp16 \
