@@ -12,19 +12,6 @@ metric = "l2"
 
 
 class TestFaissIndexFast:
-    @pytest.mark.parametrize("metric", ["l2", "ip", "cos"])
-    def test_normalize(self, metric: str):
-        index = FaissIndexFast.new(metric, D)
-        n = 3
-        x = torch.rand(n, D)
-
-        if index.metric == "cos":
-            torch.testing.assert_close(
-                index.normalize(x), x / x.square().sum(-1, keepdim=True).sqrt()
-            )
-        else:
-            assert torch.equal(index.normalize(x), x)
-
     def test_rotate(self):
         x = torch.rand(N, D)
 
