@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class SearchIndexConfig:
     """Search index config dataclass."""
 
-    backend: Literal["faiss"] = "faiss"
+    backend: str = "faiss"
     metric: str = "l2"
     hnsw_edges: int = 0
     ivf_lists: int = 0
@@ -47,6 +47,7 @@ class SearchIndex(ABC):
     """
 
     METRICS = {"l2", "ip", "cos"}
+    BACKEND_NAME = ""
 
     def __init__(self, index: Any, config: SearchIndexConfig, **kwargs) -> None:
         self.index = index

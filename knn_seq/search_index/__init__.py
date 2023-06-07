@@ -1,9 +1,13 @@
 from knn_seq.search_index.faiss_index import FaissIndex
+from knn_seq.search_index.faiss_index_fast import FaissIndexFast
 
-__all__ = ["FaissIndex"]
+__all__ = ["FaissIndex", "FaissIndexFast"]
 
 
-SEARCH_INDEX_MAP = {"faiss": FaissIndex}
+SEARCH_INDEX_MAP = {
+    FaissIndex.BACKEND_NAME: FaissIndex,
+    FaissIndexFast.BACKEND_NAME: FaissIndexFast,
+}
 
 
 def load_index(path: str, **kwargs):

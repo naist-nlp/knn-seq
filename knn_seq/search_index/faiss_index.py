@@ -19,30 +19,28 @@ GpuIndex: TypeAlias = faiss.GpuIndex if hasattr(faiss, "GpuIndex") else faiss.In
 def faiss_index_to_gpu(
     index: faiss.Index,
     num_gpus: int = -1,
-    reserve_vecs: Optional[int] = None,
     shard: bool = False,
     precompute: bool = False,
 ) -> GpuIndex:
     """Transfers the index from CPU to GPU.
 
     Args:
-        index (faiss.Index): faiss index.
-        num_gpus (int): number of GPUs to use.
-        reserve_vecs (int, optional): number of the max index size.
-        shard (bool): builds an IndexShards.
+        index (faiss.Index): Faiss index.
+        num_gpus (int): Number of GPUs to use.
+        shard (bool): Builds an IndexShards.
+        precompute (bool): Uses the precompute table for L2 distance.
 
     Returns:
-        faiss.GpuIndex: faiss index.
+        faiss.GpuIndex: Faiss index.
     """
     co = faiss.GpuMultipleClonerOptions()
     co.useFloat16 = True
     co.useFloat16CoarseQuantizer = True
     co.indicesOptions = faiss.INDICES_CPU
+
     if precompute:
         logger.info(f"Use precompute table on GPU.")
         co.usePrecomputed = precompute
-    if reserve_vecs is not None:
-        co.reserveVecs = reserve_vecs
 
     if shard:
         co.shard = True
@@ -76,6 +74,7 @@ class FaissIndex(SearchIndex):
         "ip": faiss.METRIC_INNER_PRODUCT,
         "cos": faiss.METRIC_INNER_PRODUCT,
     }
+    BACKEND_NAME = "faiss"
 
     def __len__(self) -> int:
         return self.index.ntotal
@@ -151,7 +150,7 @@ class FaissIndex(SearchIndex):
         """
 
         config = SearchIndexConfig(
-            backend="faiss",
+            backend=cls.BACKEND_NAME,
             metric=metric,
             hnsw_edges=hnsw_edges,
             ivf_lists=ivf_lists,
@@ -165,10 +164,14 @@ class FaissIndex(SearchIndex):
         assert not (config.use_opq and config.use_pca)
         vtrans = None
         if config.use_opq:
+            if transform_dim <= 0:
+                transform_dim = dim
             vtrans = faiss.OPQMatrix(dim, M=pq_subvec, d2=transform_dim)
             if transform_dim > 0:
                 dim = transform_dim
         elif config.use_pca:
+            if transform_dim <= 0:
+                transform_dim = dim
             vtrans = faiss.PCAMatrix(dim, d_out=transform_dim)
             if transform_dim > 0:
                 dim = transform_dim
