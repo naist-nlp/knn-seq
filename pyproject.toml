@@ -10,7 +10,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-torch = {version = "^1.12.1+cu116", source = "torch+cu116"}
+torch = "2.0.0"
 fairseq = "0.12.1"
 faiss-gpu = "^1.7.2"
 sentence-transformers = "^2.2.2"
@@ -23,12 +23,6 @@ knnseq-bin-fs = "knn_seq.cli.binarize_fairseq:cli_main"
 knnseq-ds = "knn_seq.cli.create_datastore:cli_main"
 knnseq-ds-fs = "knn_seq.cli.create_datastore_fairseq:cli_main"
 knnseq-index = "knn_seq.cli.build_index:cli_main"
-
-[[tool.poetry.source]]
-name = "torch+cu116"
-url = "https://download.pytorch.org/whl/cu116"
-default = false
-secondary = true
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.8.0"

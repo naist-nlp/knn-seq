@@ -44,7 +44,7 @@ def parse_args():
                         help="only use CPU")
     parser.add_argument("--backend", metavar="NAME", type=str, default="faiss",
                         help="search engine backend")
-    parser.add_argument("--feature", metavar="TYPE", default="avg",
+    parser.add_argument("--feature", metavar="TYPE", default="ffn_in",
                         help="specify the feature type (default: avg)\n"
                              "  - avg: averaging the last layer's hidden state\n"
                              "  - cls: [CLS] token\n"
@@ -112,7 +112,7 @@ def train_index(args: Namespace, ds: Datastore, index_path: str, use_gpu: bool =
         raise FileExistsError(trained_index_path)
 
     if use_gpu:
-        index.to_gpu()
+        index.to_gpu_train()
     logger.info(f"Training from {train_size:,} datapoints")
     start_time = time()
     index.train(ds[:train_size], verbose=args.verbose)
@@ -156,7 +156,7 @@ def main(args: Namespace, datastore_path: str, index_path: str):
             index = train_index(args, ds, index_path, use_gpu=use_gpu)
 
         if use_gpu:
-            index.to_gpu()
+            index.to_gpu_add(fp16=ds.is_fp16)
 
         logger.info(f"Creating the feature index in {index_path}")
         start_time = time()

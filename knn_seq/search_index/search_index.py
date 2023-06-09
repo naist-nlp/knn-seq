@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class SearchIndexConfig:
     """Search index config dataclass."""
 
-    backend: Literal["faiss"] = "faiss"
+    backend: str = "faiss"
     metric: str = "l2"
     hnsw_edges: int = 0
     ivf_lists: int = 0
@@ -47,17 +47,19 @@ class SearchIndex(ABC):
     """
 
     METRICS = {"l2", "ip", "cos"}
+    BACKEND_NAME = ""
 
     def __init__(self, index: Any, config: SearchIndexConfig, **kwargs) -> None:
         self.index = index
         self.config = config
         self.backend = config.backend
         self.metric = config.metric
-        self.is_ivf = config.ivf_lists > 0
-        self.is_hnsw = config.hnsw_edges > 0
-        self.is_pq = config.pq_subvec > 0
-        self.is_opq = config.use_opq
-        self.is_pca = config.use_pca
+        self.use_hnsw = config.hnsw_edges > 0
+        self.use_ivf = config.ivf_lists > 0
+        self.use_pq = config.pq_subvec > 0
+        self.use_opq = config.use_opq
+        self.use_pca = config.use_pca
+        self.use_gpu = False
 
     @abstractmethod
     def __len__(self) -> int:
@@ -113,12 +115,20 @@ class SearchIndex(ABC):
             faiss.normalize_L2(vectors)
         return vectors
 
-    def to_gpu(self, *args, **kwargs):
-        """Transfers the faiss index to GPUs."""
+    def to_gpu_train(self, *args, **kwargs):
+        """Transfers a CPU index to GPU devices."""
+        pass
+
+    def to_gpu_add(self, *args, **kwargs):
+        """Transfers a CPU index to GPU devices."""
+        pass
+
+    def to_gpu_search(self, *args, **kwargs):
+        """Transfers a CPU index to GPU devices."""
         pass
 
     def to_cpu(self) -> None:
-        """Transfers the faiss index to CPUs."""
+        """Transfers a GPU index to the CPU."""
         pass
 
     @property
@@ -143,11 +153,9 @@ class SearchIndex(ABC):
             ids (Optional[ndarray]): indices of the index.
         """
 
+    @abstractmethod
     def postprocess_search(
-        self,
-        distances: ndarray,
-        indices: ndarray,
-        idmap: Optional[ndarray] = None,
+        self, distances: ndarray, indices: ndarray, idmap: Optional[ndarray] = None
     ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
         """Post-processes the search results.
 
@@ -155,19 +163,11 @@ class SearchIndex(ABC):
             distances (ndarray): top-k distances.
             indices (ndarray): top-k indices.
             idmap (ndarray, optional): if given, maps the ids. (e.g., [3, 5] -> {0: 3, 1: 5})
+
+        Returns:
+            - torch.FloatTensor: top-k scores.
+            - torch.LongTensor: top-k indices.
         """
-        if idmap is not None:
-            indices = idmap[indices]
-
-        distances_tensor = torch.FloatTensor(distances)
-        indices_tensor = torch.LongTensor(indices)
-
-        if self.metric == "l2":
-            distances_tensor: torch.FloatTensor = distances_tensor.neg()
-        elif self.metric == "cos" and (self.is_hnsw and self.is_pq and not self.is_ivf):
-            distances_tensor: torch.FloatTensor = (2 - distances_tensor) / 2
-
-        return distances_tensor, indices_tensor
 
     @abstractmethod
     def query(self, querys: ndarray, k: int = 1) -> Tuple[ndarray, ndarray]:
@@ -178,8 +178,8 @@ class SearchIndex(ABC):
             k (int): number of nearest neighbors.
 
         Returns:
-            ndarray: top-k distances.
-            ndarray: top-k indices.
+            - ndarray: top-k distances.
+            - ndarray: top-k indices.
         """
 
     def search(
@@ -196,8 +196,8 @@ class SearchIndex(ABC):
             idmap (ndarray, optional): if given, maps the ids. (e.g., [3, 5] -> {0: 3, 1: 5})
 
         Returns:
-            FloatTensor: top-k scores or distances.
-            LongTensor: top-k indices.
+            - FloatTensor: top-k scores.
+            - LongTensor: top-k indices.
         """
         querys = self.normalize(querys)
         distances, indices = self.query(querys, k=k)
