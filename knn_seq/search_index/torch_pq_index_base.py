@@ -1,6 +1,5 @@
 import logging
-from time import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import faiss
 import torch
@@ -36,6 +35,7 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
 
         self.padding_idx = padding_idx
         self.precompute = precompute
+        self.beam_size = 1
 
         index = faiss_index.index
         if isinstance(index, faiss.IndexPreTransform):
@@ -51,19 +51,22 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
             self.pre_transform = False
             pq_index = index
 
-        assert isinstance(pq_index, faiss.IndexPQ)
+        if not isinstance(pq_index, faiss.IndexPQ):
+            raise ValueError("TorchPQ index only supports `faiss.IndexPQ`.")
+
         pq = pq_index.pq
         codewords = faiss.vector_to_array(pq.centroids).reshape(pq.M, pq.ksub, pq.dsub)
-        assert pq.nbits == 8
+
+        if pq.nbits != 8:
+            raise NotImplementedError(
+                "The current knn-seq does not support non-8bit PQ."
+            )
 
         self._codewords = torch.from_numpy(codewords)
         self._codes = torch.from_numpy(
             faiss.vector_to_array(pq_index.codes).reshape(-1, pq.M)
         )
         self._dim = codewords.shape[0] * codewords.shape[2]
-
-        self.beam_size = 1
-        self.nprobe = 1
 
     def __len__(self) -> int:
         """Returns the number of indexed data."""
@@ -112,20 +115,17 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
             SearchIndex: a new search index instance.
         """
 
-    def normalize(self, vectors: Tensor, cpu: bool = True) -> FloatTensor:
+    def normalize(self, vectors: Tensor) -> Tensor:
         """Normalizes the given vectors.
 
         Args:
-            vectors (Tensor): input vectors of shape `(n, D)`.
+            vectors (Tensor): Input vectors of shape `(n, D)`.
 
         Returns:
-            ndarray: normalzied np.float32 array.
+            Tensor: Normalized vectors.
         """
-        if cpu:
-            vectors = vectors.cpu().float()
         if self.metric == "cos":
-            assert vectors.dim() == 2
-            vectors = F.normalize(vectors.float()).to(vectors)
+            vectors = F.normalize(vectors.float(), dim=-1).to(vectors)
         return vectors
 
     def compute_distance(
@@ -272,14 +272,6 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         codes = self.codes[indices]
         return self.decode(codes)
 
-    def set_nprobe(self, nprobe: int) -> None:
-        """Sets the `nprobe` parameter for IVF.
-
-        Args:
-            nprobe (int): the number of probes for IVF search.
-        """
-        self.nprobe = nprobe
-
     def set_beam_size(self, beam_size: int) -> None:
         """Set beam size for efficient computation.
 
@@ -294,7 +286,7 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         distances: FloatTensor,
         indices: LongTensor,
         idmap: Optional[LongTensor] = None,
-    ) -> Tuple[torch.FloatTensor, LongTensor]:
+    ) -> Tuple[FloatTensor, LongTensor]:
         """Post-processes the search results.
 
         Args:
@@ -313,7 +305,7 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         k: int = 1,
         key_padding_mask: Optional[BoolTensor] = None,
         idmap: Optional[LongTensor] = None,
-    ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
+    ) -> Tuple[FloatTensor, LongTensor]:
         """Searches the k-nearest vectors.
 
         Args:
@@ -327,7 +319,7 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
             LongTensor: top-k indices.
         """
         assert self.is_trained
-        querys = self.normalize(querys, cpu=False)
+        querys = self.normalize(querys)
         distances, indices = self.query(querys, k=k, key_padding_mask=key_padding_mask)
         return self.postprocess_search(distances, indices, idmap=idmap)
 
