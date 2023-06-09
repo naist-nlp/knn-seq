@@ -20,6 +20,8 @@ class FaissIndexFast(FaissIndex):
     """Wrapper for faiss index.
 
     This class contains highly experimental codes.
+    Currently, this class implements:
+      - Acclerate vector addition
 
     Args:
         index (faiss.Index): Faiss index.
@@ -198,13 +200,10 @@ class FaissIndexFast(FaissIndex):
         if self.use_opq or self.use_pca:
             index = faiss.downcast_index(self.index.index)
 
-        if self.use_ivf:
-            if self.gpu_ivf_index is not None:
-                self.add_gpu_ivf_index(np_vectors)
-            elif self.gpu_ivf_cq is not None:
-                self.add_gpu_ivf_cq(np_vectors)
-            else:
-                index.add(np_vectors)
+        if self.use_ivf and self.gpu_ivf_index is not None:
+            self.add_gpu_ivf_index(np_vectors)
+        elif self.use_ivf and self.gpu_ivf_cq is not None:
+            self.add_gpu_ivf_cq(np_vectors)
         else:
             index.add(np_vectors)
 
