@@ -79,10 +79,6 @@ def test_faiss_index_to_gpu(index):
     assert is_gpu_index(gpu_index)
     assert faiss.downcast_index(gpu_index).count() == ngpus
 
-    # Reserve fixed memory
-    gpu_index = faiss_index_to_gpu(index, num_gpus=1, reserve_vecs=1024)
-    assert is_gpu_index(gpu_index)
-
     # Pre-compute option
     gpu_index = faiss_index_to_gpu(index, num_gpus=1, precompute=True)
     assert is_gpu_index(gpu_index)

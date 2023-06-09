@@ -32,9 +32,14 @@ class Datastore:
         return self._memory.shape[1]
 
     @property
-    def dtype(self):
+    def dtype(self) -> DTypeLike:
         """Returns the dtype."""
         return self._memory.dtype
+
+    @property
+    def is_fp16(self) -> bool:
+        """Returns whether the vectors are represented by fp16."""
+        return np.issubdtype(self.dtype, np.float16)
 
     def __getitem__(self, indices: Union[int, slice, NDArray]) -> NDArray:
         return self._memory[indices]

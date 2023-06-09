@@ -20,6 +20,8 @@ class FaissIndexFast(FaissIndex):
     """Wrapper for faiss index.
 
     This class contains highly experimental codes.
+    Currently, this class implements:
+      - Acclerate vector addition
 
     Args:
         index (faiss.Index): Faiss index.
@@ -32,6 +34,8 @@ class FaissIndexFast(FaissIndex):
         gpu_ivf_cq (faiss.Index, optional): GPU coarse quantizer of the IVF index.
     """
 
+    BACKEND_NAME = "faiss_fast"
+
     def __init__(self, index: faiss.Index, config: SearchIndexConfig, **kwargs) -> None:
         super().__init__(index, config, **kwargs)
         self.A: Optional[torch.Tensor] = None
@@ -39,7 +43,7 @@ class FaissIndexFast(FaissIndex):
         self.gpu_ivf_index: Optional[faiss.Index] = None
         self.gpu_ivf_cq: Optional[faiss.Index] = None
 
-        if self.use_opq or self.use_pca:
+        if self.is_trained and (self.use_opq or self.use_pca):
             vt: faiss.LinearTransform = faiss.downcast_VectorTransform(
                 faiss.downcast_index(index).chain.at(0)
             )
@@ -47,21 +51,6 @@ class FaissIndexFast(FaissIndex):
                 faiss.vector_to_array(vt.A).reshape(vt.d_out, vt.d_in).T
             )
             self.b = torch.from_numpy(faiss.vector_to_array(vt.b))
-
-    def normalize(self, vectors: torch.Tensor) -> torch.Tensor:
-        """Normalizes the input vectors.
-
-        Note that `FaissIndexFast` does not convert the input vectors into numpy array.
-
-        Args:
-            vectors (torch.Tensor): Input vectors of shape `(n, D)`.
-
-        Returns:
-            torch.Tensor: Normalized vectors of shape `(n, D)`.
-        """
-        if self.metric == "cos":
-            vectors = torch.nn.functional.normalize(vectors)
-        return vectors
 
     def _to_gpu_rotation(self, fp16: bool = False) -> None:
         """Transfers the faiss index to GPUs for adding vectors.
@@ -81,41 +70,41 @@ class FaissIndexFast(FaissIndex):
 
     def to_gpu_add(
         self,
-        gpu_rotation: bool = False,
-        fp16_rotation: bool = False,
-        gpu_ivf_full: bool = False,
+        fp16: bool = True,
+        gpu_ivf_full: bool = True,
         gpu_ivf_cq: bool = False,
     ) -> None:
         """Transfers the faiss index to GPUs for adding vectors.
 
         Args:
             fp16 (bool): Compute vector pre-transformation on fp16.
+            gpu_ivf_full (bool): Use GPU for IVF vector addition.
+            gpu_ivf_cq (bool): Use GPU for an IVF coarse quantizer.
         """
-        if gpu_rotation:
-            self._to_gpu_rotation(fp16=fp16_rotation)
+        self._to_gpu_rotation(fp16=fp16)
+
+        if self.ivf is None:
+            return
 
         if gpu_ivf_full and gpu_ivf_cq:
             raise ValueError(
                 f"gpu_ivf_full and gpu_ivf_cq cannot be set True at the same time."
             )
-        if self.ivf is not None:
-            if gpu_ivf_full:
-                if self.use_hnsw:
-                    ivf_index = self.ivf
-                    hnsw_quantizer = faiss.downcast_index(self.ivf.quantizer)
-                    ivf_index.quantizer = faiss.downcast_index(hnsw_quantizer.storage)
-                    self.gpu_ivf_index = faiss_index_to_gpu(ivf_index, shard=True)
-                    ivf_index.quantizer = hnsw_quantizer
-                else:
-                    self.gpu_ivf_index = faiss_index_to_gpu(self.ivf, shard=True)
-                self.gpu_ivf_index.reset()
-            elif gpu_ivf_cq:
-                coarse_quantizer = self.ivf.quantizer
-                if self.use_hnsw:
-                    coarse_quantizer = faiss.downcast_index(coarse_quantizer).storage
-                self.gpu_ivf_cq = faiss_index_to_gpu(
-                    faiss.downcast_index(coarse_quantizer)
-                )
+        if gpu_ivf_full:
+            if self.use_hnsw:
+                ivf_index = self.ivf
+                hnsw_quantizer = faiss.downcast_index(self.ivf.quantizer)
+                ivf_index.quantizer = faiss.downcast_index(hnsw_quantizer.storage)
+                self.gpu_ivf_index = faiss_index_to_gpu(ivf_index, shard=True)
+                ivf_index.quantizer = hnsw_quantizer
+            else:
+                self.gpu_ivf_index = faiss_index_to_gpu(self.ivf, shard=True)
+            self.gpu_ivf_index.reset()
+        elif gpu_ivf_cq:
+            coarse_quantizer = self.ivf.quantizer
+            if self.use_hnsw:
+                coarse_quantizer = faiss.downcast_index(coarse_quantizer).storage
+            self.gpu_ivf_cq = faiss_index_to_gpu(faiss.downcast_index(coarse_quantizer))
 
     def rotate(self, x: torch.Tensor, shard_size: int = 2**20) -> torch.Tensor:
         """Rotate the input vectors.
@@ -128,7 +117,7 @@ class FaissIndexFast(FaissIndex):
         Returns:
             torch.Tensor: Pre-transformed vectors of shape `(n, D)`.
         """
-        if self.A is None or self.b is None:
+        if self.A is None:
             return x
 
         x = x.type(self.A.dtype)
@@ -138,14 +127,15 @@ class FaissIndexFast(FaissIndex):
         # Compute rotation of `x[i:j]` while `i < n`.
         results = []
         n = x.size(0)
-        ns = n // shard_size
+        if shard_size <= 0:
+            shard_size = n
         i = 0
         while i < n:
-            j = min(i + ns, n)
+            j = min(i + shard_size, n)
             xs = x[i:j]
             xs = xs.to(A_device)
             xs @= self.A
-            if self.b.numel() > 0:
+            if self.b is not None and self.b.numel() > 0:
                 xs += self.b
             results.append(xs.to(x_device))
             i = j
@@ -194,13 +184,15 @@ class FaissIndexFast(FaissIndex):
         assign = self.gpu_ivf_cq.search(x, k=1)[1].ravel()
         self.ivf.add_core(x.shape[0], faiss.swig_ptr(x), None, faiss.swig_ptr(assign))
 
-    def add(self, vectors: torch.Tensor) -> None:
+    def add(self, vectors: np.ndarray) -> None:
         """Adds vectors to the index.
 
         Args:
-            vectors (torch.Tensor): Input vectors.
+            vectors (np.ndarray): Input vectors.
         """
-        vectors = self.normalize(vectors)
+        vectors = torch.from_numpy(vectors)
+        if self.metric == "cos":
+            vectors = torch.nn.functional.normalize(vectors, dim=-1)
         vectors = self.rotate(vectors)
         np_vectors = self.convert_to_numpy(vectors)
 
@@ -208,13 +200,10 @@ class FaissIndexFast(FaissIndex):
         if self.use_opq or self.use_pca:
             index = faiss.downcast_index(self.index.index)
 
-        if self.use_ivf:
-            if self.gpu_ivf_index is not None:
-                self.add_gpu_ivf_index(np_vectors)
-            elif self.gpu_ivf_cq is not None:
-                self.add_gpu_ivf_cq(np_vectors)
-            else:
-                index.add(np_vectors)
+        if self.use_ivf and self.gpu_ivf_index is not None:
+            self.add_gpu_ivf_index(np_vectors)
+        elif self.use_ivf and self.gpu_ivf_cq is not None:
+            self.add_gpu_ivf_cq(np_vectors)
         else:
             index.add(np_vectors)
 
