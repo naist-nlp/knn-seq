@@ -3,7 +3,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from typing import Any, List, Literal, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import faiss
 import numpy as np

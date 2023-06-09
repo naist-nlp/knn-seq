@@ -1,5 +1,5 @@
 import re
-from typing import List, Union, Any
+from typing import Any, List, Union
 
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer

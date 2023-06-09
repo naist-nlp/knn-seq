@@ -11,7 +11,6 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from knn_seq import utils
 from knn_seq.data import Datastore, TokenStorage
 from knn_seq.models import build_hf_model
 

@@ -7,6 +7,7 @@ from fairseq.data import Dictionary
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from fairseq.tasks.translation import load_langpair_dataset
 
+
 @pytest.fixture(scope="module")
 def testdata_models():
     """Load pre-trained model for test."""

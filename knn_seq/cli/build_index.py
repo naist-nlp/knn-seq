@@ -173,7 +173,7 @@ def main(args: Namespace, datastore_path: str, index_path: str):
             offset = (num_data // chunk_size) * chunk_size
             index.add(ds[offset:])
 
-        logger.info(f"Saving the index")
+        logger.info("Saving the index")
         index.save(index_path)
 
         end_time = time()
@@ -184,7 +184,7 @@ def main(args: Namespace, datastore_path: str, index_path: str):
     if args.append != "":
         logger.info(f"Merge index values: {args.append} -> {args.dir}")
         merge_index_values(args.dir, args.append)
-        logger.info(f"Done.")
+        logger.info("Done.")
 
 
 def call_main(args):

@@ -1,8 +1,8 @@
-import pytest
-
 import io
+
 import h5py
 import numpy as np
+import pytest
 
 from knn_seq.data.datastore import Datastore
 
