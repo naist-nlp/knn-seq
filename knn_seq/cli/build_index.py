@@ -112,7 +112,7 @@ def train_index(args: Namespace, ds: Datastore, index_path: str, use_gpu: bool =
         raise FileExistsError(trained_index_path)
 
     if use_gpu:
-        index.to_gpu()
+        index.to_gpu_train()
     logger.info(f"Training from {train_size:,} datapoints")
     start_time = time()
     index.train(ds[:train_size], verbose=args.verbose)
@@ -156,7 +156,7 @@ def main(args: Namespace, datastore_path: str, index_path: str):
             index = train_index(args, ds, index_path, use_gpu=use_gpu)
 
         if use_gpu:
-            index.to_gpu()
+            index.to_gpu_add(fp16=ds.is_fp16)
 
         logger.info(f"Creating the feature index in {index_path}")
         start_time = time()

@@ -20,15 +20,16 @@ from fairseq.tasks.translation import (
     TranslationTask,
     load_langpair_dataset,
 )
+from omegaconf import II, MISSING
 from torch import LongTensor
 
 from knn_seq.data import TokenStorage
-from knn_seq.models import FairseqKNNModel, FairseqSubsetKNNModel, build_hf_model
-from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
 from knn_seq.dataset_wrapper import (
     LanguagePairDatasetWithOriginalOrder,
     LanguagePairDatasetWithRawSentence,
 )
+from knn_seq.models import FairseqKNNModel, FairseqSubsetKNNModel, build_hf_model
+from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
 from knn_seq.search_index import FaissIndex, load_index
 
 logging.basicConfig(
@@ -114,11 +115,11 @@ class TranslationKnnConfig(TranslationConfig):
     )
     shard_size: int = field(default=20800000, metadata={"help": "shard size."})
     knn_cpu: bool = field(default=False, metadata={"help": "use CPU to retrieve"})
-    knn_fp16: bool = field(default=False, metadata={"help": "use fp16 to retrieve"})
     knn_ensemble: bool = field(
         default=False, metadata={"help": "Retrieve kNN in each model"}
     )
     knn_gpuivf: bool = field(default=False, metadata={"help": "use IVF on GPU."})
+    fp16: bool = II("common.fp16")
 
 
 @register_task("translation_knn", dataclass=TranslationKnnConfig)
@@ -280,15 +281,11 @@ class TranslationKnnTask(TranslationTask):
         if self.cfg.knn_weight <= 0.0:
             return _build_generator(models)
 
-        subset_knn = (
-            self.cfg.src_knn_model is not None or self.cfg.src_key == "enc"
-        )
+        subset_knn = self.cfg.src_knn_model is not None or self.cfg.src_key == "enc"
 
         knn_cuda = torch.cuda.is_available() and not self.cfg.knn_cpu
         data_dir = fairseq_utils.split_paths(self.cfg.data)[0]
-        index_dir = os.path.join(
-            data_dir, self.cfg.index_dirname, self.cfg.target_lang
-        )
+        index_dir = os.path.join(data_dir, self.cfg.index_dirname, self.cfg.target_lang)
         index_paths = [
             os.path.join(
                 index_dir,
@@ -311,7 +308,7 @@ class TranslationKnnTask(TranslationTask):
             index.set_nprobe(self.cfg.knn_nprobe)
             index.set_efsearch(self.cfg.knn_efsearch)
             if self.cfg.knn_gpuivf and knn_cuda:
-                index.ivf_to_gpu()
+                index.to_gpu_search()
             indexes.append(index)
         logger.info(f"Loaded kNN index from {','.join(index_paths)}")
 
@@ -336,12 +333,10 @@ class TranslationKnnTask(TranslationTask):
         if self.cfg.src_key == "enc":
             src_knn_model = None
         else:
-            src_knn_model = build_hf_model(
-                self.cfg.src_knn_model, self.cfg.src_key
-            )
+            src_knn_model = build_hf_model(self.cfg.src_knn_model, self.cfg.src_key)
             if knn_cuda:
                 src_knn_model = src_knn_model.cuda()
-                if self.cfg.knn_fp16:
+                if self.cfg.fp16:
                     src_knn_model = src_knn_model.half()
             logger.info(f"Loaded source kNN model: {src_knn_model}")
         src_index_dir = os.path.join(
@@ -358,7 +353,7 @@ class TranslationKnnTask(TranslationTask):
         src_index.set_nprobe(self.cfg.src_nprobe)
         src_index.set_efsearch(self.cfg.src_efsearch)
         if knn_cuda:
-            src_index.to_gpu()
+            src_index.to_gpu_search()
 
         logger.info(f"Loaded source index from {src_index_path}")
 

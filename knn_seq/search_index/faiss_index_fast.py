@@ -70,18 +70,18 @@ class FaissIndexFast(FaissIndex):
 
     def to_gpu_add(
         self,
-        gpu_rotation: bool = False,
-        fp16_rotation: bool = False,
-        gpu_ivf_full: bool = False,
+        fp16: bool = True,
+        gpu_ivf_full: bool = True,
         gpu_ivf_cq: bool = False,
     ) -> None:
         """Transfers the faiss index to GPUs for adding vectors.
 
         Args:
             fp16 (bool): Compute vector pre-transformation on fp16.
+            gpu_ivf_full (bool): Use GPU for IVF vector addition.
+            gpu_ivf_cq (bool): Use GPU for an IVF coarse quantizer.
         """
-        if gpu_rotation:
-            self._to_gpu_rotation(fp16=fp16_rotation)
+        self._to_gpu_rotation(fp16=fp16)
 
         if self.ivf is None:
             return

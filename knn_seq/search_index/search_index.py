@@ -115,12 +115,20 @@ class SearchIndex(ABC):
             faiss.normalize_L2(vectors)
         return vectors
 
-    def to_gpu(self, *args, **kwargs):
-        """Transfers the faiss index to GPUs."""
+    def to_gpu_train(self, *args, **kwargs):
+        """Transfers a CPU index to GPU devices."""
+        pass
+
+    def to_gpu_add(self, *args, **kwargs):
+        """Transfers a CPU index to GPU devices."""
+        pass
+
+    def to_gpu_search(self, *args, **kwargs):
+        """Transfers a CPU index to GPU devices."""
         pass
 
     def to_cpu(self) -> None:
-        """Transfers the faiss index to CPUs."""
+        """Transfers a GPU index to the CPU."""
         pass
 
     @property

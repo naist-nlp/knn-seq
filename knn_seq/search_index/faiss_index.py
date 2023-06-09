@@ -258,11 +258,9 @@ class FaissIndex(SearchIndex):
                 opq.pq = opq_pq
             self.use_gpu = True
 
-    def to_gpu_add(self) -> None:
+    def to_gpu_add(self, *args, **kwargs) -> None:
         """Transfers the faiss index to GPUs for adding."""
-        raise NotImplementedError(
-            "Please use `FaissIndexFast` class to add vectors on GPUs."
-        )
+        logger.warning("Please use `FaissIndexFast` class to add vectors on GPUs.")
 
     def to_gpu_search(self) -> None:
         """Transfers the faiss index to GPUs for searching."""
