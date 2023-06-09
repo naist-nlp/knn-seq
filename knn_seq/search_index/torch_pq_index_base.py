@@ -154,6 +154,9 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
     ) -> FloatTensor:
         """Computes distance between two vectors.
 
+        For efficient computation, this method uses `torch.cdist()` for L2 distance and
+        `torch.bmm()` for inner product.
+
         Args:
             a (FloatTensor): float vectors of shape `(bsz, m, D)`.
             b (FloatTensor): float vectors of shape `(bsz, n, D)`.
