@@ -1,8 +1,10 @@
-from typing import List
+from typing import Dict, List, Optional
 
 import pytest
 import torch
 import torch.nn as nn
+from fairseq.sequence_generator import EnsembleModel
+from torch import Tensor
 
 from data.fixtures import (  # pylint: disable=unused-import
     testdata_langpair_dataset,
@@ -242,3 +244,117 @@ class TestFairseqKNNModelBase:
         assert knn_output.scores.shape == expected_knn_output.scores.shape
         assert knn_output.probs.shape == expected_knn_output.probs.shape
         assert knn_output.indices.shape == expected_knn_output.indices.shape
+
+    @pytest.mark.parametrize("is_knn_ensemble", [True, False])
+    @pytest.mark.parametrize("has_incremental", [True, False])
+    @pytest.mark.parametrize("has_multiple_models", [True, False])
+    def test_forward_decoder_with_knn(
+        self,
+        generate_test_data,
+        testdata_models,
+        has_multiple_models,
+        has_incremental,
+        is_knn_ensemble,
+        monkeypatch,
+    ) -> None:
+        ensemble, _ = testdata_models
+
+        if has_multiple_models:
+            ensemble = ensemble * 2
+        knn_model_base = FairseqKNNMockModel(ensemble)
+        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
+
+        net_inputs = {
+            "src_tokens": generate_test_data["net_input"]["src_tokens"],
+            "src_lengths": generate_test_data["net_input"]["src_lengths"],
+        }
+
+        encoder_outs = [model.encoder(**net_inputs) for model in ensemble]
+        tokens = generate_test_data["net_input"]["prev_output_tokens"]
+
+        encoder_out = None
+        knn_queries = None
+
+        incremental_states = torch.jit.annotate(
+            List[Dict[str, Dict[str, Optional[Tensor]]]],
+            [
+                torch.jit.annotate(Dict[str, Dict[str, Optional[Tensor]]], {})
+                for i in range(knn_model_base.models_size)
+            ],
+        )
+        ensemble_model = EnsembleModel(ensemble)
+        lprobs, attn = ensemble_model.forward_decoder(
+            tokens, encoder_outs, incremental_states
+        )
+
+        knn_model_base.knn_ensemble = is_knn_ensemble
+        knn_model_base.has_incremental = has_incremental
+        for i, model in enumerate(knn_model_base.wrapped_models):
+            if knn_model_base.has_encoder():
+                encoder_out = encoder_outs[i]
+
+            if knn_model_base.has_incremental_states():
+                decoder_out = model.forward_decoder(
+                    tokens,
+                    encoder_out=encoder_out,
+                    incremental_state=incremental_states[i],
+                )
+            else:
+                decoder_out = model.forward_decoder(tokens, encoder_out=encoder_out)
+
+            decoder_len = len(decoder_out)
+            if decoder_len > 1 and decoder_out[1] is not None:
+                if knn_model_base.knn_ensemble or i == 0:
+                    knn_queries = decoder_out[1]["features"][0][:, -1, :]
+
+            if knn_model_base.knn_ensemble:
+                lprobs, knn_output = knn_model_base.add_knn_probs(
+                    lprobs, knn_queries, index_id=i
+                )
+                expected_lprobs = lprobs
+                expected_attn = attn
+                expected_knn_output = knn_output
+
+        if not knn_model_base.knn_ensemble:
+            lprobs, knn_output = knn_model_base.add_knn_probs(lprobs, knn_queries)
+            expected_lprobs = lprobs
+            expected_attn = attn
+            expected_knn_output = knn_output
+
+        lprobs, attn, knn_output = knn_model_base.forward_decoder_with_knn(
+            tokens, encoder_outs, incremental_states
+        )
+        assert lprobs.shape == expected_lprobs.shape
+        assert attn.shape == expected_attn.shape
+        assert knn_output.scores.shape == expected_knn_output.scores.shape
+        assert knn_output.probs.shape == expected_knn_output.probs.shape
+        assert knn_output.indices.shape == expected_knn_output.indices.shape
+
+    def test_forward_decoder(self, generate_test_data, testdata_models, monkeypatch):
+        ensemble, _ = testdata_models
+        knn_model_base = FairseqKNNMockModel(ensemble)
+
+        net_inputs = {
+            "src_tokens": generate_test_data["net_input"]["src_tokens"],
+            "src_lengths": generate_test_data["net_input"]["src_lengths"],
+        }
+
+        tokens = generate_test_data["net_input"]["prev_output_tokens"]
+        encoder_outs = [model.encoder(**net_inputs) for model in ensemble]
+        incremental_states = torch.jit.annotate(
+            List[Dict[str, Dict[str, Optional[Tensor]]]],
+            [
+                torch.jit.annotate(Dict[str, Dict[str, Optional[Tensor]]], {})
+                for i in range(knn_model_base.models_size)
+            ],
+        )
+        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
+
+        expected_lprobs, expected_attn, _ = knn_model_base.forward_decoder_with_knn(
+            tokens, encoder_outs, incremental_states
+        )
+        lprobs, attn = knn_model_base.forward_decoder(
+            tokens, encoder_outs, incremental_states
+        )
+        assert lprobs.shape == expected_lprobs.shape
+        assert attn.shape == expected_attn.shape
