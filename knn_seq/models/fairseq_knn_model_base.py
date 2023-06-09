@@ -333,5 +333,7 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
             - Tensor: Log probability tensor of shape `(bbsz, vocab_size)`.
             - Tensor: Attention weight tensor of shape `(bbsz, src_len)`.
         """
-        lprobs, attn, knn_output = self.forward_decoder_with_knn(tokens, encoder_outs, incremental_states, temperature)
+        lprobs, attn, knn_output = self.forward_decoder_with_knn(
+            tokens, encoder_outs, incremental_states, temperature
+        )
         return lprobs, attn

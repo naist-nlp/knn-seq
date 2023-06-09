@@ -88,7 +88,7 @@ class FaissIndexFast(FaissIndex):
 
         if gpu_ivf_full and gpu_ivf_cq:
             raise ValueError(
-                f"gpu_ivf_full and gpu_ivf_cq cannot be set True at the same time."
+                "gpu_ivf_full and gpu_ivf_cq cannot be set True at the same time."
             )
         if gpu_ivf_full:
             if self.use_hnsw:

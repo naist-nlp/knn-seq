@@ -1,8 +1,7 @@
 import logging
-from typing import Any, List, Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import faiss
-import numpy as np
 import torch
 from numpy import ndarray
 from typing_extensions import TypeAlias
@@ -39,7 +38,7 @@ def faiss_index_to_gpu(
     co.indicesOptions = faiss.INDICES_CPU
 
     if precompute:
-        logger.info(f"Use precompute table on GPU.")
+        logger.info("Use precompute table on GPU.")
         co.usePrecomputed = precompute
 
     if shard:

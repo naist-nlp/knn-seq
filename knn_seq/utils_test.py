@@ -1,11 +1,13 @@
-from knn_seq import utils
-import pytest, warnings
-import math
-import numpy as np
-import torch
-from collections import UserDict, UserList
-import time
 import logging
+import math
+import time
+from collections import UserDict, UserList
+
+import numpy as np
+import pytest
+import torch
+
+from knn_seq import utils
 
 
 class TestBufferLines:

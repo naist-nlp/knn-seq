@@ -3,16 +3,16 @@ import pytest
 import torch
 from fairseq.data import data_utils
 
-from knn_seq.dataset_wrapper import (
-    LanguagePairDatasetWithOriginalOrder,
-    LanguagePairDatasetWithRawSentence,
-)
 from data.fixtures import (
     testdata_langpair_dataset,
     testdata_src_dict,
     testdata_src_sents,
     testdata_tgt_dict,
     testdata_tgt_sents,
+)
+from knn_seq.dataset_wrapper import (
+    LanguagePairDatasetWithOriginalOrder,
+    LanguagePairDatasetWithRawSentence,
 )
 
 

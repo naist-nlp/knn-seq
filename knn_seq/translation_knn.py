@@ -20,7 +20,7 @@ from fairseq.tasks.translation import (
     TranslationTask,
     load_langpair_dataset,
 )
-from omegaconf import II, MISSING
+from omegaconf import II
 from torch import LongTensor
 
 from knn_seq.data import TokenStorage
