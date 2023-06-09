@@ -44,7 +44,7 @@ def parse_args():
                         help="only use CPU")
     parser.add_argument("--backend", metavar="NAME", type=str, default="faiss",
                         help="search engine backend")
-    parser.add_argument("--feature", metavar="TYPE", default="avg",
+    parser.add_argument("--feature", metavar="TYPE", default="ffn_in",
                         help="specify the feature type (default: avg)\n"
                              "  - avg: averaging the last layer's hidden state\n"
                              "  - cls: [CLS] token\n"

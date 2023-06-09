@@ -49,9 +49,7 @@ INDEX_METRIC_CHOICES = ChoiceEnum(["l2", "ip", "cos"])
 
 @dataclass
 class TranslationKnnConfig(TranslationConfig):
-    knn_key: str = field(
-        default="ffn_in", metadata={"help": "Type of kNN key."}
-    )
+    knn_key: str = field(default="ffn_in", metadata={"help": "Type of kNN key."})
     knn_metric: INDEX_METRIC_CHOICES = field(
         default="l2", metadata={"help": "Distance function for kNN."}
     )
@@ -70,9 +68,7 @@ class TranslationKnnConfig(TranslationConfig):
         metadata={"help": "This option is only used when using HNSW search."},
     )
 
-    src_key: str = field(
-        default="sbert", metadata={"help": "Type of source-side key."}
-    )
+    src_key: str = field(default="sbert", metadata={"help": "Type of source-side key."})
     src_metric: INDEX_METRIC_CHOICES = field(
         default="l2", metadata={"help": "Distance function for source-side kNN."}
     )
