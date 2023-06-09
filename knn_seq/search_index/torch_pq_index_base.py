@@ -1,11 +1,12 @@
 import logging
-from typing import Any, Dict, Optional, Tuple, Union
+from time import time
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import faiss
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import ByteTensor, FloatTensor, LongTensor, Tensor
+from torch import BoolTensor, ByteTensor, FloatTensor, LongTensor, Tensor
 
 from knn_seq.search_index.faiss_index import FaissIndex
 from knn_seq.search_index.search_index import SearchIndex
@@ -19,8 +20,8 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
     c.f. https://gist.github.com/mdouze/94bd7a56d912a06ac4719c50fa5b01ac
 
     Args:
-        faiss_index (FaissIndex): wrapped faiss index.
-        padding_idx (int): the padding index for `subset_indices`. (default: -1)
+        faiss_index (FaissIndex): Wrapped faiss index.
+        padding_idx (int): The padding index for `subset_indices`. (default: -1)
     """
 
     def __init__(
@@ -61,6 +62,7 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         )
         self._dim = codewords.shape[0] * codewords.shape[2]
 
+        self.beam_size = 1
         self.nprobe = 1
 
     def __len__(self) -> int:
@@ -109,7 +111,6 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         Returns:
             SearchIndex: a new search index instance.
         """
-        raise NotImplementedError
 
     def normalize(self, vectors: Tensor, cpu: bool = True) -> FloatTensor:
         """Normalizes the given vectors.
@@ -132,8 +133,6 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
     ) -> FloatTensor:
         """Computes distance between two vectors.
 
-        The output values are always returned as similarity, so L2-distance will be negatived.
-
         Args:
             a (FloatTensor): float vectors of shape `(..., D)`.
             b (FloatTensor): float vectors of shape `(..., D)`.
@@ -144,7 +143,7 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         """
         fn = fn if fn is not None else self.metric
         if fn == "l2":
-            return -((a - b) ** 2).sum(dim=-1)
+            return ((a - b) ** 2).sum(dim=-1)
         if fn == "ip" or fn == "cos":
             return (a * b).sum(dim=-1)
         else:
@@ -154,8 +153,6 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         self, a: FloatTensor, b: FloatTensor, fn: Optional[str] = None
     ) -> FloatTensor:
         """Computes distance between two vectors.
-
-        The output values are always returned as similarity, so L2-distance will be negatived.
 
         Args:
             a (FloatTensor): float vectors of shape `(bsz, m, D)`.
@@ -167,7 +164,7 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         """
         fn = fn if fn is not None else self.metric
         if fn == "l2":
-            return -((a - b) ** 2).sum(dim=-1)
+            return (torch.cdist(a.float(), b.float()) ** 2).to(dtype=a.dtype)
         if fn == "ip" or fn == "cos":
             return torch.bmm(a, b.transpose(1, 2))
         else:
@@ -283,26 +280,30 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         """
         self.nprobe = nprobe
 
+    def set_beam_size(self, beam_size: int) -> None:
+        """Set beam size for efficient computation.
+
+        Args:
+            beam_size (int): Beam size.
+        """
+        self.beam_size = beam_size
+
     @torch.jit.export
     def postprocess_search(
         self,
         distances: FloatTensor,
-        indices: Dict[str, LongTensor],
+        indices: LongTensor,
         idmap: Optional[LongTensor] = None,
-    ) -> Tuple[torch.FloatTensor, Dict[str, LongTensor]]:
+    ) -> Tuple[torch.FloatTensor, LongTensor]:
         """Post-processes the search results.
 
         Args:
             distances (FloatTensor): top-k distances.
-            indices (Dict[str, LongTensor]): top-k indices.
+            indices (LongTensor): top-k indices.
             idmap (LongTensor, optional): if given, maps the ids. (e.g., [3, 5] -> {0: 3, 1: 5})
         """
         if idmap is not None:
-            indices["k_ids"] = idmap[indices["k_indices"]]
-
-        if self.metric == "l2":
-            distances: torch.FloatTensor = distances.neg()
-
+            indices = idmap[indices]
         return distances, indices
 
     @torch.jit.export
@@ -310,22 +311,24 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         self,
         querys: Tensor,
         k: int = 1,
+        key_padding_mask: Optional[BoolTensor] = None,
         idmap: Optional[LongTensor] = None,
-    ) -> Tuple[torch.FloatTensor, Dict[str, torch.LongTensor]]:
+    ) -> Tuple[torch.FloatTensor, torch.LongTensor]:
         """Searches the k-nearest vectors.
 
         Args:
             querys (Tensor): query vectors.
             k (int): number of nearest neighbors.
+            key_padding_mask (BoolTensor, optional): Key padding mask of shape `(bsz, subset_size)`
             idmap (LongTensor, optional): if given, maps the ids. (e.g., [3, 5] -> {0: 3, 1: 5})
 
         Returns:
             FloatTensor: top-k scores or distances.
-            Dict[str, torch.LongTensor]: top-k indices.
+            LongTensor: top-k indices.
         """
         assert self.is_trained
         querys = self.normalize(querys, cpu=False)
-        distances, indices = self.query(querys, k=k)
+        distances, indices = self.query(querys, k=k, key_padding_mask=key_padding_mask)
         return self.postprocess_search(distances, indices, idmap=idmap)
 
     def clear(self) -> None:

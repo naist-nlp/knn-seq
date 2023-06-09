@@ -170,7 +170,7 @@ class SearchIndex(ABC):
         """
 
     @abstractmethod
-    def query(self, querys: ndarray, k: int = 1) -> Tuple[ndarray, ndarray]:
+    def query(self, querys: ndarray, k: int = 1, **kwargs) -> Tuple[ndarray, ndarray]:
         """Querys the k-nearest vectors to the index.
 
         Args:

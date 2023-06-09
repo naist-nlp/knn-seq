@@ -25,11 +25,20 @@ class FairseqKNNModel(FairseqKNNModelBase):
         knn_threshold: Optional[float] = None,
         knn_weight: float = 0.5,
     ):
+        """Set kNN indexes.
+
+        Args:
+            val (TokenStorage): Value of the datastore.
+            indexes (List[SearchIndex]): Key indexes of the datastore.
+            knn_topk (int): Retrieve the top-k nearest neighbors.
+            knn_temperature (float): Temperature for the kNN probability distribution.
+            knn_threshold (float, optional): Threshold which controls whether to use the retrieved examples.
+            knn_weight (float): Weight for the kNN probabiltiy.
+        """
         self.val = val
         self.indexes = indexes
         self.knn_topk = knn_topk
         self.knn_temperature = knn_temperature
-
         self.knn_threshold = knn_threshold
         self.knn_weight = knn_weight
 
