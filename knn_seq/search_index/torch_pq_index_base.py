@@ -129,17 +129,17 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         return vectors
 
     def compute_distance(
-        self, a: FloatTensor, b: FloatTensor, fn: Optional[str] = None
-    ) -> FloatTensor:
+        self, a: Tensor, b: Tensor, fn: Optional[str] = None
+    ) -> Tensor:
         """Computes distance between two vectors.
 
         Args:
-            a (FloatTensor): float vectors of shape `(..., D)`.
-            b (FloatTensor): float vectors of shape `(..., D)`.
-            fn (str, optional): distance function.
+            a (Tensor): Float vectors of shape `(..., D)`.
+            b (Tensor): Float vectors of shape `(..., D)`.
+            fn (str, optional): Distance function.
 
         Returns:
-            FloatTensor: distances between `a` and `b` of shape `(...,)`.
+            Tensor: Distances between `a` and `b` of shape `(...,)`.
         """
         fn = fn if fn is not None else self.metric
         if fn == "l2":
@@ -150,20 +150,20 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
             raise NotImplementedError
 
     def compute_distance_table(
-        self, a: FloatTensor, b: FloatTensor, fn: Optional[str] = None
-    ) -> FloatTensor:
+        self, a: Tensor, b: Tensor, fn: Optional[str] = None
+    ) -> Tensor:
         """Computes distance between two vectors.
 
         For efficient computation, this method uses `torch.cdist()` for L2 distance and
         `torch.bmm()` for inner product.
 
         Args:
-            a (FloatTensor): float vectors of shape `(bsz, m, D)`.
-            b (FloatTensor): float vectors of shape `(bsz, n, D)`.
-            fn (str, optional): distance function.
+            a (Tensor): Float vectors of shape `(bsz, m, D)`.
+            b (Tensor): Float vectors of shape `(bsz, n, D)`.
+            fn (str, optional): Distance function.
 
         Returns:
-            FloatTensor: distances between `a` and `b` of shape `(...,)`.
+            Tensor: Distances between `a` and `b` of shape `(...,)`.
         """
         fn = fn if fn is not None else self.metric
         if fn == "l2":
@@ -178,32 +178,32 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         """Returns the index is trained or not."""
         return self.index.is_trained
 
-    def pre_encode(self, x: FloatTensor) -> FloatTensor:
+    def pre_encode(self, x: Tensor) -> Tensor:
         """Pre-encodes the vectors.
 
         Args:
-            x (FloatTensor): `(n, D)`, where `D = M * dsub`.
+            x (Tensor): `(n, D)`, where `D = M * dsub`.
                 M is the number of subspaces, dsub is the dimension of each subspace.
 
         Returns:
-            FloatTensor: pre-transformed vectors of shape `(n, D)`.
+            Tensor: Pre-transformed vectors of shape `(n, D)`.
         """
         A, b = self.A, self.b
-        x = x @ A.t()
+        x @= A.t()
         if b.numel() > 0:
             x += b
         return x
 
     @torch.jit.export
-    def encode(self, x: FloatTensor) -> ByteTensor:
+    def encode(self, x: Tensor) -> Tensor:
         """Encodes the vectors to the codes.
 
         Args:
-            x (FloatTensor): `(n, D)`, where `D = M * dsub`.
+            x (Tensor): `(n, D)`, where `D = M * dsub`.
                 M is the number of subspaces, dsub is the dimension of each subspace.
 
         Returns:
-            ByteTensor: uint8 codes of shape `(n, M)`.
+            Tensor: uint8 codes of shape `(n, M)`.
         """
         if self.pre_transform:
             x = self.pre_encode(x)
