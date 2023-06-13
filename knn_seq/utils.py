@@ -52,6 +52,13 @@ def read_lines(
         List[str]: buffered input lines.
     """
 
+    if not isinstance(input, str):
+        raise TypeError(f"input must be str, but got {type(input)}")
+    if not isinstance(buffer_size, int):
+        raise TypeError(f"buffer_size must be int, but got {type(buffer_size)}")
+    if not isinstance(progress, bool):
+        raise TypeError(f"progress must be bool, but got {type(progress)}")
+
     def progress_bar(buf):
         if progress:
             return tqdm(buf)
@@ -77,6 +84,9 @@ def parallel_apply(
     Yields:
         List[Any]: the object to which the function is applied.
     """
+
+    if num_workers < 1:
+        raise ValueError(f"num_workers must be at least 1, but got {num_workers}")
 
     def merge_workers(workers):
         return list(chain.from_iterable(res.get() for res in workers))
@@ -162,6 +172,7 @@ def pad(tensors: List[Tensor], padding_idx: int) -> Tensor:
         tensors (List[Tensor]): A tensor list.
         padding_idx (int): Padding index.
     """
+
     max_len = max(len(t) for t in tensors)
     dtype = tensors[0].dtype
     new_tensor = torch.full(
@@ -186,8 +197,16 @@ class StopwatchMeter:
 
     def start(self):
         self.start_time = time.perf_counter()
+        self.stop_time = None
 
     def stop(self, n=1, prehook=None):
+        if not isinstance(n, int):
+            raise TypeError(f"n must be int, but got {type(n)}")
+
+        if self.stop_time is not None:
+            # already stopped and wasn't started again
+            return
+
         stop_time = time.perf_counter()
         if self.start_time is not None:
             if prehook is not None:
@@ -201,7 +220,7 @@ class StopwatchMeter:
         self.sum = 0  # cumulative time during which stopwatch was active
         self.n = 0  # total n across all start/stop
         self.stop_time = None
-        self.start()
+        self.start_time = None
 
     @property
     def avg(self):
@@ -209,7 +228,7 @@ class StopwatchMeter:
 
     @property
     def elapsed_time(self):
-        if self.start_time is None:
+        if self.start_time is None or self.stop_time is not None:
             return 0.0
         return time.perf_counter() - self.start_time
 

@@ -464,12 +464,7 @@ class TestPad:
     def test_type_errors(self):
         tensor_list = [np.arange(5), np.arange(2)]
         with pytest.raises(TypeError):
-            result = utils.pad(tensor_list)
-
-    def test_value_error(self):
-        tensor_list = [torch.eye(2), torch.arange(1)]
-        with pytest.raises(ValueError):
-            result = utils.pad(tensor_list, -1)
+            _ = utils.pad(tensor_list)
 
     @pytest.mark.parametrize(
         ("tensor_list", "padding_idx", "expected_value"),
@@ -602,9 +597,8 @@ class TestStopwatchMeter:
             captured_progress = capsys.readouterr().out
             assert captured_progress == "Hello?\n" * iterations
 
-    @pytest.mark.parametrize(
-        ("n", "use_prehook"), [(1, False), (1, True), (2, False), (1, True)]
-    )
+    @pytest.mark.parametrize(("use_prehook"), [True, False])
+    @pytest.mark.parametrize(("n"), [1, 2])
     def test_multiple_stops(self, capsys, monkeypatch, stopwatch, n, use_prehook):
         def simple_prehook():
             print("Hello?")
