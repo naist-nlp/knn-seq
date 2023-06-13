@@ -35,7 +35,7 @@ def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
     """Verify that the tokens of the instance can be restored to the original data.
 
     Args:
-        orig_list (List): source tokens of sentences.
+        orig_list (List[List[int]]): source tokens of sentences.
         ts (:class:`TokenStorage`): TokenStorage object.
 
     Returns:
@@ -43,8 +43,8 @@ def invest_match(orig_list: List[List[int]], ts: TokenStorage) -> bool:
     """
     ts_tokens = []
     for i in ts.orig_order:
-        ts_tokens.append(list(ts[i]))
-    return np.array_equal(orig_list, ts_tokens)
+        ts_tokens.append(ts[i].tolist())
+    return orig_list == ts_tokens
 
 
 class TmpDataset(torch.utils.data.Dataset):
