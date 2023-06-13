@@ -2,9 +2,9 @@ import fileinput
 import logging
 import time
 from collections import UserDict, UserList
+from concurrent import futures
 from itertools import chain
-from multiprocessing.pool import Pool
-from typing import Any, Callable, Iterable, Iterator, List
+from typing import Any, Callable, Iterable, Iterator, List, TypeVar
 
 import fairseq
 import numpy as np
@@ -62,45 +62,33 @@ def read_lines(
             yield lines
 
 
+T = TypeVar("T")
+
+
 def parallel_apply(
-    func: Callable, iterable: Iterable, num_workers: int = 1, *args, **kwargs
-) -> Iterator[List[Any]]:
+    func: Callable[[Any], T], iterable: Iterable, num_workers: int = 1
+) -> Iterator[T]:
     """Applys a function to an iterable object in parallel.
 
     Args:
-        func (Callable): a function to be applied to an iterable object.
+        func (Callable[[Any], T]): a function to be applied to an iterable object.
         iterable (Iterable): an iterable object
         num_workers (int): number of workers.
-        *args: positional arguments of the function.
-        *kwargs: keyword arguments of the function.
 
     Yields:
-        List[Any]: the object to which the function is applied.
+        T: the object to which the function is applied.
     """
 
     if num_workers < 1:
         raise ValueError(f"num_workers must be at least 1, but got {num_workers}")
 
-    def merge_workers(workers):
-        return list(chain.from_iterable(res.get() for res in workers))
-
     if num_workers > 1:
-        workers = []
-        with Pool(processes=num_workers) as pool:
-            for buffer in iterable:
-                workers.append(
-                    pool.apply_async(func, args=(buffer, *args), kwds=kwargs)
-                )
-                if len(workers) >= num_workers:
-                    yield merge_workers(workers)
-                    workers = []
-
-            if len(workers) > 0:
-                yield merge_workers(workers)
-
+        with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+            for res in executor.map(func, iterable):
+                yield res
     else:
         for buffer in iterable:
-            yield func(buffer, *args, **kwargs)
+            yield func(buffer)
 
 
 def to_ndarray(x):
