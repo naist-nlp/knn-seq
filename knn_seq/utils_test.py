@@ -55,21 +55,6 @@ class TestReadLines:
         path = tmp_path / "test.txt"
         return path
 
-    def test_type_error_input(self):
-        with pytest.raises(TypeError):
-            for result_lines in utils.read_lines(input=12, buffer_size=1):
-                assert result_lines == None
-
-    @pytest.mark.parametrize(("buffer_size", "progress"), [("4", True), (1, 100)])
-    def test_type_errors(self, tmp_file, buffer_size, progress):
-        tmp_file.write_text("-")
-
-        with pytest.raises(TypeError):
-            for result_lines in utils.read_lines(
-                input=str(tmp_file), buffer_size=buffer_size, progress=progress
-            ):
-                assert result_lines == ["-"]
-
     def test_no_file(self, tmp_file):
         with pytest.raises(FileNotFoundError):
             for result_lines in utils.read_lines(input=str(tmp_file), buffer_size=1):
@@ -496,12 +481,6 @@ class TestStopwatchMeter:
         stopwatch.start()
         assert stopwatch.start_time == 120
 
-    @pytest.mark.parametrize("n", [torch.arange(2), 5.0, "2"])
-    def test_stop_type_errors(self, stopwatch, n):
-        stopwatch.start()
-        with pytest.raises(TypeError):
-            stopwatch.stop(n=n)
-
     @pytest.mark.parametrize(
         ("should_start", "n", "use_prehook"),
         [
@@ -597,8 +576,8 @@ class TestStopwatchMeter:
             captured_progress = capsys.readouterr().out
             assert captured_progress == "Hello?\n" * iterations
 
-    @pytest.mark.parametrize(("use_prehook"), [True, False])
-    @pytest.mark.parametrize(("n"), [1, 2])
+    @pytest.mark.parametrize("use_prehook", [True, False])
+    @pytest.mark.parametrize("n", [1, 2])
     def test_multiple_stops(self, capsys, monkeypatch, stopwatch, n, use_prehook):
         def simple_prehook():
             print("Hello?")

@@ -52,13 +52,6 @@ def read_lines(
         List[str]: buffered input lines.
     """
 
-    if not isinstance(input, str):
-        raise TypeError(f"input must be str, but got {type(input)}")
-    if not isinstance(buffer_size, int):
-        raise TypeError(f"buffer_size must be int, but got {type(buffer_size)}")
-    if not isinstance(progress, bool):
-        raise TypeError(f"progress must be bool, but got {type(progress)}")
-
     def progress_bar(buf):
         if progress:
             return tqdm(buf)
@@ -199,10 +192,7 @@ class StopwatchMeter:
         self.start_time = time.perf_counter()
         self.stop_time = None
 
-    def stop(self, n=1, prehook=None):
-        if not isinstance(n, int):
-            raise TypeError(f"n must be int, but got {type(n)}")
-
+    def stop(self, n: int = 1, prehook=None):
         if self.stop_time is not None:
             # already stopped and wasn't started again
             return
