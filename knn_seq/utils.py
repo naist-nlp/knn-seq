@@ -2,9 +2,9 @@ import fileinput
 import logging
 import time
 from collections import UserDict, UserList
+from concurrent import futures
 from itertools import chain
-from multiprocessing.pool import Pool
-from typing import Any, Callable, Iterable, Iterator, List
+from typing import Any, Callable, Iterable, Iterator, List, TypeVar
 
 import fairseq
 import numpy as np
@@ -62,42 +62,33 @@ def read_lines(
             yield lines
 
 
+T = TypeVar("T")
+
+
 def parallel_apply(
-    func: Callable, iterable: Iterable, num_workers: int = 1, *args, **kwargs
-) -> Iterator[List[Any]]:
+    func: Callable[[Any], T], iterable: Iterable, num_workers: int = 1
+) -> Iterator[T]:
     """Applys a function to an iterable object in parallel.
 
     Args:
-        func (Callable): a function to be applied to an iterable object.
+        func (Callable[[Any], T]): a function to be applied to an iterable object.
         iterable (Iterable): an iterable object
         num_workers (int): number of workers.
-        *args: positional arguments of the function.
-        *kwargs: keyword arguments of the function.
 
     Yields:
-        List[Any]: the object to which the function is applied.
+        T: the object to which the function is applied.
     """
 
-    def merge_workers(workers):
-        return list(chain.from_iterable(res.get() for res in workers))
+    if num_workers < 1:
+        raise ValueError(f"num_workers must be at least 1, but got {num_workers}")
 
     if num_workers > 1:
-        workers = []
-        with Pool(processes=num_workers) as pool:
-            for buffer in iterable:
-                workers.append(
-                    pool.apply_async(func, args=(buffer, *args), kwds=kwargs)
-                )
-                if len(workers) >= num_workers:
-                    yield merge_workers(workers)
-                    workers = []
-
-            if len(workers) > 0:
-                yield merge_workers(workers)
-
+        with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+            for res in executor.map(func, iterable):
+                yield res
     else:
         for buffer in iterable:
-            yield func(buffer, *args, **kwargs)
+            yield func(buffer)
 
 
 def to_ndarray(x):
@@ -162,6 +153,7 @@ def pad(tensors: List[Tensor], padding_idx: int) -> Tensor:
         tensors (List[Tensor]): A tensor list.
         padding_idx (int): Padding index.
     """
+
     max_len = max(len(t) for t in tensors)
     dtype = tensors[0].dtype
     new_tensor = torch.full(
@@ -186,8 +178,13 @@ class StopwatchMeter:
 
     def start(self):
         self.start_time = time.perf_counter()
+        self.stop_time = None
 
-    def stop(self, n=1, prehook=None):
+    def stop(self, n: int = 1, prehook=None):
+        if self.stop_time is not None:
+            # already stopped and wasn't started again
+            return
+
         stop_time = time.perf_counter()
         if self.start_time is not None:
             if prehook is not None:
@@ -201,7 +198,7 @@ class StopwatchMeter:
         self.sum = 0  # cumulative time during which stopwatch was active
         self.n = 0  # total n across all start/stop
         self.stop_time = None
-        self.start()
+        self.start_time = None
 
     @property
     def avg(self):
@@ -209,7 +206,7 @@ class StopwatchMeter:
 
     @property
     def elapsed_time(self):
-        if self.start_time is None:
+        if self.start_time is None or self.stop_time is not None:
             return 0.0
         return time.perf_counter() - self.start_time
 

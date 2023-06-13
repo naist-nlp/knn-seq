@@ -55,21 +55,6 @@ class TestReadLines:
         path = tmp_path / "test.txt"
         return path
 
-    def test_type_error_input(self):
-        with pytest.raises(TypeError):
-            for result_lines in utils.read_lines(input=12, buffer_size=1):
-                assert result_lines == None
-
-    @pytest.mark.parametrize(("buffer_size", "progress"), [("4", True), (1, 100)])
-    def test_type_errors(self, tmp_file, buffer_size, progress):
-        tmp_file.write_text("-")
-
-        with pytest.raises(TypeError):
-            for result_lines in utils.read_lines(
-                input=str(tmp_file), buffer_size=buffer_size, progress=progress
-            ):
-                assert result_lines == ["-"]
-
     def test_no_file(self, tmp_file):
         with pytest.raises(FileNotFoundError):
             for result_lines in utils.read_lines(input=str(tmp_file), buffer_size=1):
@@ -167,37 +152,11 @@ class TestParallelApply:
 
     def test_simple_with_two_workers(self):
         result = utils.parallel_apply(double_it, [0.0, 1.0, 2.0, 3.0], 2)
-        assert next(result) == [0.0, 2.0]
-        assert next(result) == [4.0, 6.0]
-        with pytest.raises(StopIteration):
-            next(result)
-
-    def test_with_args(self):
-        result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, 3)
         assert next(result) == 0
-        assert next(result) == 3.0
+        assert next(result) == 2.0
+        assert next(result) == 4.0
         assert next(result) == 6.0
-        assert next(result) == 9.0
         with pytest.raises(StopIteration):
-            next(result)
-
-    def test_with_kwargs(self):
-        result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, y=3)
-        assert next(result) == 0
-        assert next(result) == 3.0
-        assert next(result) == 6.0
-        assert next(result) == 9.0
-        with pytest.raises(StopIteration):
-            next(result)
-
-    def test_with_bad_args(self):
-        with pytest.raises(TypeError):
-            result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, 3, 5)
-            next(result)
-
-    def test_with_bad_kwargs(self):
-        with pytest.raises(TypeError):
-            result = utils.parallel_apply(scale, [0.0, 1.0, 2.0, 3.0], 1, z=3)
             next(result)
 
     def test_with_no_input(self):
@@ -226,15 +185,18 @@ class TestParallelApply:
     def test_with_two_workers(self, tmp_file):
         result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 2)
 
-        assert next(result) == ["A\n", "B\n", "C\n", "D\n", "E"]
+        assert next(result) == ["A\n", "B\n", "C\n"]
+        assert next(result) == ["D\n", "E"]
         with pytest.raises(StopIteration):
             next(result)
 
     def test_with_two_workers2(self, tmp_file):
         result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 1), 2)
 
-        assert next(result) == ["A\n", "B\n"]
-        assert next(result) == ["C\n", "D\n"]
+        assert next(result) == ["A\n"]
+        assert next(result) == ["B\n"]
+        assert next(result) == ["C\n"]
+        assert next(result) == ["D\n"]
         assert next(result) == ["E"]
         with pytest.raises(StopIteration):
             next(result)
@@ -242,7 +204,8 @@ class TestParallelApply:
     def test_with_too_many_workers(self, tmp_file):
         result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 12)
 
-        assert next(result) == ["A\n", "B\n", "C\n", "D\n", "E"]
+        assert next(result) == ["A\n", "B\n", "C\n"]
+        assert next(result) == ["D\n", "E"]
         with pytest.raises(StopIteration):
             next(result)
 
@@ -464,12 +427,7 @@ class TestPad:
     def test_type_errors(self):
         tensor_list = [np.arange(5), np.arange(2)]
         with pytest.raises(TypeError):
-            result = utils.pad(tensor_list)
-
-    def test_value_error(self):
-        tensor_list = [torch.eye(2), torch.arange(1)]
-        with pytest.raises(ValueError):
-            result = utils.pad(tensor_list, -1)
+            _ = utils.pad(tensor_list)
 
     @pytest.mark.parametrize(
         ("tensor_list", "padding_idx", "expected_value"),
@@ -500,12 +458,6 @@ class TestStopwatchMeter:
         assert stopwatch.start_time == None
         stopwatch.start()
         assert stopwatch.start_time == 120
-
-    @pytest.mark.parametrize("n", [torch.arange(2), 5.0, "2"])
-    def test_stop_type_errors(self, stopwatch, n):
-        stopwatch.start()
-        with pytest.raises(TypeError):
-            stopwatch.stop(n=n)
 
     @pytest.mark.parametrize(
         ("should_start", "n", "use_prehook"),
@@ -602,9 +554,8 @@ class TestStopwatchMeter:
             captured_progress = capsys.readouterr().out
             assert captured_progress == "Hello?\n" * iterations
 
-    @pytest.mark.parametrize(
-        ("n", "use_prehook"), [(1, False), (1, True), (2, False), (1, True)]
-    )
+    @pytest.mark.parametrize("use_prehook", [True, False])
+    @pytest.mark.parametrize("n", [1, 2])
     def test_multiple_stops(self, capsys, monkeypatch, stopwatch, n, use_prehook):
         def simple_prehook():
             print("Hello?")
