@@ -42,7 +42,7 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         Args:
             val (TokenStorage): Value of the datastore.
             indexes (List[SearchIndex]): Key indexes of the datastore.
-            src_knn_model (HFAutoModelBase, optional): Sentence encoder model for the similar sentence search.
+            src_knn_model (HFModelBase, optional): Sentence encoder model for the similar sentence search.
             src_val (TokenStorage): Value of the sentence datastore.
             src_index (FaissIndex): Key index of the sentence datastore.
             knn_topk (int): Retrieve the top-k nearest neighbors.
@@ -110,7 +110,7 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
             src_query = self.extract_sentence_features_from_encoder_outs(encoder_outs)[
                 0
             ]
-        elif isinstance(self.src_knn_model, HFAutoModelBase):
+        elif isinstance(self.src_knn_model, HFModelBase):
             tokenizer = self.src_knn_model.tokenizer
             src_query = self.src_knn_model(
                 tokenizer.collate(tokenizer.encode_lines(self.src_sents))
