@@ -13,7 +13,6 @@ import torch
 from fairseq import utils as fairseq_utils
 from fairseq.data import LanguagePairDataset
 from fairseq.dataclass import ChoiceEnum
-from fairseq.search import BeamSearch
 from fairseq.tasks import register_task
 from fairseq.tasks.translation import (
     TranslationConfig,
@@ -111,7 +110,7 @@ class TranslationKnnConfig(TranslationConfig):
     knn_temperature: float = field(
         default=100.0, metadata={"help": "kNN softmax temperature."}
     )
-    shard_size: int = field(default=20800000, metadata={"help": "shard size."})
+    shard_size: int = field(default=40000000, metadata={"help": "shard size."})
     knn_cpu: bool = field(default=False, metadata={"help": "use CPU to retrieve"})
     knn_ensemble: bool = field(
         default=False, metadata={"help": "Retrieve kNN in each model"}
@@ -242,42 +241,15 @@ class TranslationKnnTask(TranslationTask):
                 (https://arxiv.org/abs/2010.00904) and
                 https://github.com/facebookresearch/GENRE.
         """
-        from fairseq.sequence_generator import (
-            SequenceGenerator,
-            SequenceGeneratorWithAlignment,
-        )
 
-        def _build_generator(
-            models, seq_gen_cls=seq_gen_cls, extra_gen_cls_kwargs=extra_gen_cls_kwargs
-        ):
-            extra_gen_cls_kwargs = extra_gen_cls_kwargs or {}
-            if seq_gen_cls is None:
-                if getattr(args, "print_alignment", False):
-                    seq_gen_cls = SequenceGeneratorWithAlignment
-                    extra_gen_cls_kwargs["print_alignment"] = args.print_alignment
-                else:
-                    seq_gen_cls = SequenceGenerator
-
-            return seq_gen_cls(
-                models,
-                self.target_dictionary,
-                beam_size=getattr(args, "beam", 5),
-                max_len_a=getattr(args, "max_len_a", 0),
-                max_len_b=getattr(args, "max_len_b", 200),
-                min_len=getattr(args, "min_len", 1),
-                normalize_scores=(not getattr(args, "unnormalized", False)),
-                len_penalty=getattr(args, "lenpen", 1),
-                unk_penalty=getattr(args, "unkpen", 0),
-                temperature=getattr(args, "temperature", 1.0),
-                match_source_len=getattr(args, "match_source_len", False),
-                no_repeat_ngram_size=getattr(args, "no_repeat_ngram_size", 0),
-                search_strategy=BeamSearch(self.target_dictionary),
-                **extra_gen_cls_kwargs,
-            )
-
-        assert 0.0 <= self.cfg.knn_weight <= 1.0
         if self.cfg.knn_weight <= 0.0:
-            return _build_generator(models)
+            return super().build_generator(
+                models,
+                args,
+                seq_gen_cls=seq_gen_cls,
+                extra_gen_cls_kwargs=extra_gen_cls_kwargs,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            )
 
         subset_knn = self.cfg.src_knn_model is not None or self.cfg.src_key == "enc"
 
@@ -325,7 +297,13 @@ class TranslationKnnTask(TranslationTask):
                 knn_threshold=self.cfg.knn_threshold,
                 knn_weight=self.cfg.knn_weight,
             )
-            return _build_generator(models)
+            return super().build_generator(
+                models,
+                args,
+                seq_gen_cls=seq_gen_cls,
+                extra_gen_cls_kwargs=extra_gen_cls_kwargs,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            )
 
         # subset kNN-MT
         if self.cfg.src_key == "enc":
@@ -372,8 +350,16 @@ class TranslationKnnTask(TranslationTask):
             knn_weight=self.cfg.knn_weight,
             src_topk=self.cfg.src_topk,
             shard_size=self.cfg.shard_size,
+            use_gpu=knn_cuda,
+            use_fp16=self.cfg.fp16,
         )
-        return _build_generator(models)
+        return super().build_generator(
+            models,
+            args,
+            seq_gen_cls=seq_gen_cls,
+            extra_gen_cls_kwargs=extra_gen_cls_kwargs,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+        )
 
     def inference_step(
         self, generator, models, sample, prefix_tokens=None, constraints=None

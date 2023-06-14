@@ -12,19 +12,18 @@ from knn_seq.data.token_storage import TokenStorage
 from knn_seq.models.fairseq_knn_model import FairseqKNNModel
 from knn_seq.models.hf_model import HFModelBase
 from knn_seq.search_index import FaissIndex
-from knn_seq.search_index.search_index import SearchIndex
-from knn_seq.search_index.torch_pq import TorchPQIndex
+from knn_seq.search_index.torch_pq_index import TorchPQIndex
 
 logger = logging.getLogger(__name__)
 
 
 class FairseqSubsetKNNModel(FairseqKNNModel):
-    """A wrapper for subset kNN-MT."""
+    """Subset kNN-MT class."""
 
     def set_index(
         self,
         val: TokenStorage,
-        indexes: List[SearchIndex],
+        indexes: List[FaissIndex],
         src_knn_model: Optional[HFModelBase],
         src_val: TokenStorage,
         src_index: FaissIndex,
@@ -33,15 +32,42 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         knn_threshold: Optional[float] = None,
         knn_weight: float = 0.5,
         src_topk: int = 16,
-        src_knn_temperature: float = 1.0,
-        shard_size: int = 20800000,
+        precompute: bool = True,
+        shard_size: Optional[int] = None,
+        use_gpu: bool = False,
+        use_fp16: bool = False,
     ):
+        """Set kNN indexes.
+
+        Args:
+            val (TokenStorage): Value of the datastore.
+            indexes (List[SearchIndex]): Key indexes of the datastore.
+            src_knn_model (HFModelBase, optional): Sentence encoder model for the similar sentence search.
+            src_val (TokenStorage): Value of the sentence datastore.
+            src_index (FaissIndex): Key index of the sentence datastore.
+            knn_topk (int): Retrieve the top-k nearest neighbors.
+            knn_temperature (float): Temperature for the kNN probability distribution.
+            knn_threshold (float, optional): Threshold which controls whether to use the retrieved examples.
+            knn_weight (float): Weight for the kNN probabiltiy.
+            src_topk (int): Retrieve the top-k nearest neighbor sentences.
+            precompute (bool): Compute the distance between query and keys by using asymmetric distance computation (ADC).
+            shard_size (int, optional): Shard size for the distance computation in the subset search.
+            use_gpu (bool): Use GPU to compute the distance.
+            use_fp16 (bool): Use fp16 on the distance computation.
+        """
+
+        # TODO(deguchi): ensemble
         index = indexes[0]
         self.val = val
-        # TODO(deguchi): ensemble
         self.index = index
-        self.subset_index = TorchPQIndex(self.index, use_gpu=True, use_half=False)
-        self.subset_index.shard_size = shard_size
+        self.subset_index = TorchPQIndex(
+            self.index,
+            padding_idx=self.pad,
+            use_gpu=use_gpu,
+            use_fp16=use_fp16,
+            precompute=precompute,
+            shard_size=shard_size,
+        )
         self.knn_topk = knn_topk
         self.knn_temperature = knn_temperature
         self.knn_threshold = knn_threshold
@@ -51,10 +77,19 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         self.src_val = src_val
         self.src_index = src_index
         self.src_topk = src_topk
-        self.src_knn_temperature = src_knn_temperature
 
         self.src_knn_timer = utils.StopwatchMeter()
         self.reorder_timer = utils.StopwatchMeter()
+
+    def set_decoder_beam_size(self, beam_size: int) -> None:
+        """Set beam size for efficient computation.
+
+        Args:
+            beam_size (int): Beam size.
+        """
+        super().set_decoder_beam_size(beam_size)
+        self.beam_size = beam_size
+        self.subset_index.set_beam_size(beam_size)
 
     @torch.jit.export
     def forward_encoder(
@@ -71,40 +106,38 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         # Source sentence search
         self.src_knn_timer.start()
         device = net_input["src_tokens"].device
-        if self.src_knn_model is not None:
+        if self.src_knn_model is None:
+            src_query = self.extract_sentence_features_from_encoder_outs(encoder_outs)[
+                0
+            ]
+        elif isinstance(self.src_knn_model, HFModelBase):
             tokenizer = self.src_knn_model.tokenizer
             src_query = self.src_knn_model(
                 tokenizer.collate(tokenizer.encode_lines(self.src_sents))
             )
         else:
-            src_query = self.extract_sentence_features_from_encoder_outs(
-                encoder_outs,
-            )[0]
+            raise NotImplementedError
 
         _, src_indices = self.src_index.search(
             src_query, k=self.src_topk, idmap=self.src_val.sort_order
         )
         self.src_knn = src_indices.tolist()
 
+        subset_sent_idxs = self.val.orig_order[src_indices.numpy()]
         subset_indices = [
-            [self.val.get_interval(src_nbest_i_k) for src_nbest_i_k in src_nbest_i]
-            for src_nbest_i in src_indices
-        ]
-        flatten_subset_indices = [
-            np.concatenate(subset_i) for subset_i in subset_indices
+            np.concatenate([np.arange(b_ik, e_ik) for b_ik, e_ik in zip(b_i, e_i)])
+            for b_i, e_i in zip(
+                self.val.offsets[subset_sent_idxs],
+                self.val.offsets[subset_sent_idxs + 1],
+            )
         ]
         self.subset_index.set_subsets(
-            [torch.LongTensor(subset) for subset in flatten_subset_indices]
+            [torch.LongTensor(subset) for subset in subset_indices]
         )
-        self.subset_vocab_ids = utils.pad(
-            [
-                torch.LongTensor(self.val.tokens[subset])
-                for subset in flatten_subset_indices
-            ],
-            self.pad,
-        ).to(device)
-        self.batch_idxs = torch.arange(len(self.subset_vocab_ids)).to(device)
-
+        subset_tokens = [
+            torch.LongTensor(self.val.tokens[subset]) for subset in subset_indices
+        ]
+        self.subset_tokens = utils.pad(subset_tokens, self.pad).to(device)
         self.src_knn_timer.stop(n=len(src_query))
 
         return encoder_outs
@@ -121,21 +154,21 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         Output:
             KNNOutput: A kNN output object.
         """
-        scores, indices = self.subset_index.search(querys, k=self.knn_topk)
-        bsz, subset_size = self.subset_vocab_ids.size()
-        k_indices = indices["k_indices"].view(bsz, self.beam_size, self.knn_topk)
-        vocab_indices = (
-            self.subset_vocab_ids.unsqueeze(1)
+        scores, indices = self.subset_index.search(
+            querys, k=self.knn_topk, key_padding_mask=self.subset_tokens.eq(self.pad)
+        )
+        bsz, subset_size = self.subset_tokens.size()
+        tokens = (
+            self.subset_tokens.unsqueeze(1)
             .expand(bsz, self.beam_size, subset_size)
-            .gather(dim=2, index=k_indices)
+            .gather(dim=-1, index=indices.view(bsz, self.beam_size, self.knn_topk))
             .view(bsz * self.beam_size, self.knn_topk)
         )
-
         if self.knn_threshold is not None:
             scores[scores < self.knn_threshold] = float("-inf")
         probs = utils.softmax(scores / self.knn_temperature).type_as(querys)
 
-        return self.KNNOutput(scores, probs, vocab_indices)
+        return self.KNNOutput(scores, probs, tokens)
 
     @torch.jit.export
     def reorder_encoder_out(
@@ -158,26 +191,14 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         )
 
         self.reorder_timer.start()
-        if len(self.src_indices) > 0:
-            self.src_indices = [self.src_indices[0].index_select(0, new_order)]
 
-        new_batch_order = self.batch_idxs.index_select(0, new_order[:: self.beam_size])
-        self.subset_vocab_ids = self.subset_vocab_ids.index_select(0, new_batch_order)
-        num_paddings = self.subset_vocab_ids.eq(self.pad).sum(dim=1).min()
-        subset_size = self.subset_vocab_ids.size(1)
-        new_subset_size = subset_size - num_paddings
-        if num_paddings > 0:
-            self.subset_vocab_ids = self.subset_vocab_ids[
-                :, :new_subset_size
-            ].contiguous()
-        new_bsz = new_batch_order.size(0)
-        self.batch_idxs = (
-            torch.arange(new_bsz)
-            .unsqueeze(1)
-            .expand(new_bsz, self.beam_size)
-            .to(self.subset_vocab_ids.device)
-            .view(-1)
-        )
+        new_batch_order = new_order[:: self.beam_size] // self.beam_size
+
+        if self.subset_tokens.size(0) == new_batch_order.size(0):
+            self.reorder_timer.stop(len(new_order))
+            return new_outs
+
+        self.subset_tokens = self.subset_tokens.index_select(0, new_batch_order)
         self.subset_index.reorder_encoder_out(new_order)
         self.reorder_timer.stop(len(new_order))
 

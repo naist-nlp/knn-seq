@@ -83,7 +83,7 @@ def main(args: Namespace):
     datastore_fnames = [
         "datastore{}.{}.bin".format(
             "" if i == 0 else i,
-            task.cfg.src_index_key if args.store_src_sent else task.cfg.knn_key,
+            task.cfg.src_key if args.store_src_sent else task.cfg.knn_key,
         )
         for i in range(len(models))
     ]

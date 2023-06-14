@@ -48,7 +48,7 @@ def parse_args():
     parser = ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument("--outdir", "-o", metavar="DIR", default="index",
                         help="output directory")
-    parser.add_argument("--max-tokens", metavar="N", type=int, default=512,
+    parser.add_argument("--max-tokens", metavar="N", type=int, default=12000,
                         help="max tokens per batch")
     parser.add_argument("--save-freq", metavar="N", type=int, default=512,
                         help="save frequency to reduce random write access;\n"
