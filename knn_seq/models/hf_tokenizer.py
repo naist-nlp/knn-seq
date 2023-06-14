@@ -1,12 +1,10 @@
 import re
 from typing import Any, List, Union
 
-from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
 from transformers.tokenization_utils import BatchEncoding
 
 from knn_seq import utils
-from knn_seq.models.sbert import SBERT_MODELS
 
 SPACE_NORMALIZER = re.compile(r"\s+")
 
@@ -25,7 +23,7 @@ def space_tokenize(line: str) -> List[str]:
     return line.split()
 
 
-class HFAutoTokenizer:
+class HFTokenizer:
     """Huggingface tokenizer wrapper class.
 
     Args:
@@ -44,7 +42,7 @@ class HFAutoTokenizer:
     @classmethod
     def build_tokenizer(
         cls, name_or_path: str, pretokenized: bool = False, use_gpu: bool = False
-    ) -> "HFAutoTokenizer":
+    ) -> "HFTokenizer":
         """Builds a tokenizer.
 
         Args:
@@ -53,12 +51,9 @@ class HFAutoTokenizer:
             use_gpu (bool): use GPU.
 
         Returns:
-            HFAutoTokenizer: this class.
+            HFTokenizer: this class.
         """
-        if name_or_path in SBERT_MODELS:
-            tokenizer = SentenceTransformer(name_or_path, device="cpu").tokenizer
-        else:
-            tokenizer = AutoTokenizer.from_pretrained(name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(name_or_path)
         return cls(tokenizer, pretokenized=pretokenized, use_gpu=use_gpu)
 
     def encode(self, line: Union[str, List[str]]) -> List[int]:
