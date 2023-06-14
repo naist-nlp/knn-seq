@@ -43,7 +43,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-SENTENCE_INDEX_CHOICES = ChoiceEnum(["avg", "cls", "sbert", "enc"])
+SENTENCE_INDEX_CHOICES = ChoiceEnum(["avg", "cls", "senttr", "enc"])
 INDEX_METRIC_CHOICES = ChoiceEnum(["l2", "ip", "cos"])
 
 
@@ -68,7 +68,9 @@ class TranslationKnnConfig(TranslationConfig):
         metadata={"help": "This option is only used when using HNSW search."},
     )
 
-    src_key: str = field(default="sbert", metadata={"help": "Type of source-side key."})
+    src_key: str = field(
+        default="senttr", metadata={"help": "Type of source-side key."}
+    )
     src_metric: INDEX_METRIC_CHOICES = field(
         default="l2", metadata={"help": "Distance function for source-side kNN."}
     )

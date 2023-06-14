@@ -10,7 +10,7 @@ from torch import LongTensor, Tensor
 from knn_seq import utils
 from knn_seq.data.token_storage import TokenStorage
 from knn_seq.models.fairseq_knn_model import FairseqKNNModel
-from knn_seq.models.hf_model import HFAutoModelBase
+from knn_seq.models.hf_model import HFModelBase
 from knn_seq.search_index import FaissIndex
 from knn_seq.search_index.search_index import SearchIndex
 from knn_seq.search_index.torch_pq import TorchPQIndex
@@ -25,7 +25,7 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         self,
         val: TokenStorage,
         indexes: List[SearchIndex],
-        src_knn_model: Optional[HFAutoModelBase],
+        src_knn_model: Optional[HFModelBase],
         src_val: TokenStorage,
         src_index: FaissIndex,
         knn_topk: int = 16,

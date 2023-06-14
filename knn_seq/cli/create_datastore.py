@@ -61,7 +61,7 @@ def parse_args():
                         help="specify the feature type (default: avg)\n"
                              "  - avg: averaging the last layer's hidden states\n"
                              "  - cls: [CLS] token\n"
-                             "  - sbert: using sentence-transformers")
+                             "  - senttr: using sentence-transformers")
     parser.add_argument("model_name", metavar="MODEL_NAME",
                         help="model/tokenizer name for huggingface models")
     # fmt: on
@@ -86,7 +86,7 @@ def main(args):
         len(val),
         dim=model.get_embed_dim(),
         dtype=np.float16 if args.fp16 else np.float32,
-    ) as mmap:
+    ) as ds:
         logger.info("Creating the datastore to {}".format(datastore_path))
         start_time = time()
         feature_vectors = []
@@ -101,11 +101,11 @@ def main(args):
             feature_vectors.append(net_outputs.cpu().numpy())
 
             if (i + 1) % args.save_freq == 0:
-                mmap.add(np.concatenate(feature_vectors))
+                ds.add(np.concatenate(feature_vectors))
                 feature_vectors = []
 
         if len(feature_vectors) > 0:
-            mmap.add(np.concatenate(feature_vectors))
+            ds.add(np.concatenate(feature_vectors))
 
         end_time = time()
 

@@ -48,7 +48,7 @@ def parse_args():
                         help="specify the feature type (default: avg)\n"
                              "  - avg: averaging the last layer's hidden state\n"
                              "  - cls: [CLS] token\n"
-                             "  - sbert: sentence BERT\n"
+                             "  - senttr: using sentence-transformers\n"
                              "  - ffn_out: the decoder's hidden states\n"
                              "  - ffn_in: the decoder's hidden states")
     parser.add_argument("--metric", metavar="TYPE", default="l2",

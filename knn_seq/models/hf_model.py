@@ -1,3 +1,4 @@
+import re
 from typing import Dict
 
 import torch.nn as nn
@@ -5,11 +6,10 @@ from sentence_transformers.SentenceTransformer import SentenceTransformer
 from torch import Tensor
 from transformers import AutoModel
 
-from knn_seq.models.hf_tokenizer import HFAutoTokenizer
-from knn_seq.models.sbert import SBERT_MODELS
+from knn_seq.models.hf_tokenizer import HFTokenizer
 
 
-class HFAutoModelBase(nn.Module):
+class HFModelBase(nn.Module):
     """Huggingface model wrapper.
 
     Args:
@@ -21,7 +21,7 @@ class HFAutoModelBase(nn.Module):
         self.name_or_path = name_or_path
         self.model = AutoModel.from_pretrained(name_or_path)
         self.init_model()
-        self.tokenizer = HFAutoTokenizer.build_tokenizer(name_or_path)
+        self.tokenizer = HFTokenizer.build_tokenizer(name_or_path)
 
     def init_model(self) -> None:
         for p in self.parameters():
@@ -53,7 +53,7 @@ class HFAutoModelBase(nn.Module):
         return self.model.get_input_embeddings().embedding_dim
 
 
-class HFAutoModelAvg(HFAutoModelBase):
+class HFModelAvg(HFModelBase):
     def forward(self, net_inputs: Dict[str, Tensor]) -> Tensor:
         """Returns extracted features.
 
@@ -69,7 +69,7 @@ class HFAutoModelAvg(HFAutoModelBase):
         return active_hiddens.sum(dim=1) / non_pad_mask.sum(dim=1, keepdim=True)
 
 
-class HFAutoModelCls(HFAutoModelBase):
+class HFModelCls(HFModelBase):
     def forward(self, net_inputs: Dict[str, Tensor]) -> Tensor:
         """Returns extracted features.
 
@@ -83,13 +83,15 @@ class HFAutoModelCls(HFAutoModelBase):
         return net_outputs["pooler_output"]
 
 
-class HFAutoModelSBERT(HFAutoModelBase):
+class SentenceTransformerModel(HFModelBase):
     def __init__(self, name_or_path: str) -> None:
-        super(HFAutoModelBase, self).__init__()
+        super(HFModelBase, self).__init__()
         self.name_or_path = name_or_path
-        self.model = SentenceTransformer(name_or_path)
+        self.model = SentenceTransformer(
+            re.sub(r"^sentence-transformers/", "", name_or_path)
+        )
         self.init_model()
-        self.tokenizer = HFAutoTokenizer(self.model.tokenizer)
+        self.tokenizer = HFTokenizer(self.model.tokenizer)
 
     def forward(self, net_inputs: Dict[str, Tensor]) -> Tensor:
         """Returns extracted features.
@@ -112,7 +114,7 @@ class HFAutoModelSBERT(HFAutoModelBase):
         return self.model.get_sentence_embedding_dimension()
 
 
-def build_hf_model(model_name: str, feature: str) -> HFAutoModelBase:
+def build_hf_model(model_name: str, feature: str) -> HFModelBase:
     """Build a huggingface model from a model name and a feature type.
 
     Args:
@@ -120,14 +122,12 @@ def build_hf_model(model_name: str, feature: str) -> HFAutoModelBase:
         feature (str): feature type.
 
     Returns:
-        HFAutoModelBase: wrappered huggingface model.
+        HFModelBase: wrappered huggingface model.
     """
-    if feature == "sbert" or feature == "labse" or model_name in SBERT_MODELS:
-        if feature == "labse" or model_name == "labse":
-            model_name = "LaBSE"
-        return HFAutoModelSBERT(model_name)
+    if model_name.startswith("sentence-transformers/"):
+        return SentenceTransformerModel(model_name)
     elif feature == "avg":
-        return HFAutoModelAvg(model_name)
+        return HFModelAvg(model_name)
     elif feature == "cls":
-        return HFAutoModelCls(model_name)
+        return HFModelCls(model_name)
     raise NotImplementedError

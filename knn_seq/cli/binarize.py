@@ -7,7 +7,7 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 
 from knn_seq import utils
 from knn_seq.data import TokenStorage
-from knn_seq.models.hf_tokenizer import HFAutoTokenizer
+from knn_seq.models.hf_tokenizer import HFTokenizer
 
 logging.basicConfig(
     format="| %(asctime)s | %(levelname)s | %(message)s",
@@ -41,7 +41,7 @@ def main(args):
     if not os.path.exists(args.outdir):
         os.makedirs(args.outdir, exist_ok=True)
 
-    tokenizer = HFAutoTokenizer.build_tokenizer(
+    tokenizer = HFTokenizer.build_tokenizer(
         args.model_name_or_path, pretokenized=args.pretokenized
     )
 
