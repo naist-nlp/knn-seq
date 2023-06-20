@@ -323,7 +323,7 @@ class TranslationKnnTask(TranslationTask):
         src_val = TokenStorage.load(src_index_dir)
         src_index_path = os.path.join(
             src_index_dir,
-            f"index.{self.cfg.src_key}.{self.cfg.src_index_metric}.bin",
+            f"index.{self.cfg.src_key}.{self.cfg.src_metric}.bin",
         )
         src_index = FaissIndex.load(src_index_path)
         src_index.set_nprobe(self.cfg.src_nprobe)

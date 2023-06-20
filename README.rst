@@ -115,6 +115,7 @@ Subset kNN-MT quantizes the target key vectors instead of building the kNN index
 
     python knn_seq/cli/build_index.py \
         -d ${INDEX_DIR} \
+        --outpref pq \
         --train-size 5242880 \
         --chunk-size 10000000 \
         --feature ffn_in \
@@ -135,9 +136,10 @@ Next, construct the sentence datastore.
     SRC_INDEX_DIR=${DATABIN_DIR}/index/de.${SRC_KEY}  # source index directory must be `{binarized_data}/index/${src_lang}.{src_key}`
 
     # Preprocess the source text that is used for the sentence datastore.
+    # In this case, give the detokenized source-side text. Sentences will be tokenized by the LaBSE tokenizer in :code:`binarize.py`.
     python knn_seq/cli/binarize.py \
-        --input corpus/datastore-text.de \
-        --output ${SRC_INDEX_DIR} \
+        --input corpus/datastore-text.detok.de \
+        --outdir ${SRC_INDEX_DIR} \
         sentence-transformers/LaBSE  # cf. https://huggingface.co/sentence-transformers/LaBSE
 
     # Construct the sentence datastore.
@@ -182,7 +184,7 @@ Then, build the index of the sentence datastore.
         -d ${SRC_INDEX_DIR} \
         --train-size 5242880 \
         --chunk-size 10000000 \
-        --feature ffn_in \
+        --feature ${SRC_KEY} \
         --metric l2 \
         --hnsw-edges 32 \  # Coarse quantizer to search nearest top-`nprobe` centroids
         --ivf-lists 32768 \  # K-means clustering
@@ -197,6 +199,16 @@ Generate translations using subset kNN-MT.
 .. code:: bash
 
    # Case1: sentence-tranformers/LaBSE
+   # Copy the detokenized source sentence to query the neighbor sentences by LaBSE.
+   fairseq-preprocess \
+        --source-lang de --target-lang en \
+        --srcdict wmt19.de-en.ffn8192/dict.de.txt \
+        --tgtdict wmt19.de-en.ffn8192/dict.en.txt \
+        --testpref corpus/test \
+        --destdir ${DATABIN_DIR}/orig \
+        --dataset-impl raw  # Just copy the text files.
+
+   # Generate.
    fairseq-generate \
         --user-dir knn_seq/ \
         --task translation_knn \
@@ -217,6 +229,7 @@ Generate translations using subset kNN-MT.
         ${DATABIN_DIR}
 
    # Case2: NMT encoder
+   # Generate.
    fairseq-generate \
         --user-dir knn_seq/ \
         --task translation_knn \
