@@ -217,7 +217,6 @@ Generate translations using subset kNN-MT.
         --knn-key ffn_in \
         --knn-metric l2 \
         --knn-topk 64 \  # The number of nearest neighbors.
-        --knn-nprobe 32 \ # The number of nearest centroids for IVF search.
         --knn-temperature 100.0 \  # Temperature of kNN softmax.
         --knn-weight 0.5 \  # kNN-MT interpolation parameter.
         --src-key ${SRC_KEY} \
@@ -238,7 +237,6 @@ Generate translations using subset kNN-MT.
         --knn-key ffn_in \
         --knn-metric l2 \
         --knn-topk 64 \  # The number of nearest neighbors.
-        --knn-nprobe 32 \ # The number of nearest centroids for IVF search.
         --knn-temperature 100.0 \  # Temperature of kNN softmax.
         --knn-weight 0.5 \  # kNN-MT interpolation parameter.
         --src-key ${SRC_KEY} \

@@ -57,8 +57,8 @@ def parse_args():
                         help="only use CPU")
     parser.add_argument("--fp16", action="store_true",
                         help="use FP16")
-    parser.add_argument("--feature", metavar="TYPE", default="avg",
-                        help="specify the feature type (default: avg)\n"
+    parser.add_argument("--feature", metavar="TYPE", default="senttr",
+                        help="specify the feature type (default: senttr)\n"
                              "  - avg: averaging the last layer's hidden states\n"
                              "  - cls: [CLS] token\n"
                              "  - senttr: using sentence-transformers")
