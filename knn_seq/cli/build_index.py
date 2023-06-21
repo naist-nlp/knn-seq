@@ -164,7 +164,7 @@ def main(args: Namespace, datastore_path: str, index_path: str):
             offset = i * chunk_size
             nadd = offset + chunk_size
             logger.info(f"Add vectors: {nadd:,} / {num_data:,}")
-            index.add(ds[offset : offset + chunk_size], verbose=args.verbose)
+            index.add(ds[offset : offset + chunk_size])
             logger.info(f"Index size: {len(index):,}")
             if args.append == "" and args.safe:
                 logger.info("Save index")
