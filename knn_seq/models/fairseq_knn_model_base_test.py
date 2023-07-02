@@ -22,7 +22,12 @@ class FairseqKNNMockModel(FairseqKNNModelBase):
         pass
 
     def search(self, querys: torch.Tensor, index_id: int = 0):
-        pass
+        batch_size = 2
+        k = 2
+        scores = torch.rand(batch_size, k)
+        probs = torch.rand(batch_size, k)
+        indices = torch.zeros(batch_size, k, dtype=torch.long)
+        return FairseqKNNModelBase.KNNOutput(scores, probs, indices)
 
 
 @pytest.fixture(scope="module")
@@ -34,15 +39,6 @@ def generate_test_data(testdata_langpair_dataset):
 class BeamableModel(nn.Module):
     def set_beam_size(self, beam_size):
         self.beam_size = beam_size
-
-
-def search(self, queries, index_id=0):
-    batch_size = 2
-    k = 2
-    scores = torch.rand(batch_size, k)
-    probs = torch.rand(batch_size, k)
-    indices = torch.zeros(batch_size, k, dtype=torch.long)
-    return FairseqKNNModelBase.KNNOutput(scores, probs, indices)
 
 
 class TestFairseqKNNModelBase:
@@ -201,7 +197,7 @@ class TestFairseqKNNModelBase:
         assert feature_sizes == expected_feature_sizes
 
     @pytest.mark.parametrize("knn_threshold", [torch.zeros(2), None])
-    def test_add_knn_probs(self, knn_threshold, testdata_models, monkeypatch) -> None:
+    def test_add_knn_probs(self, knn_threshold, testdata_models) -> None:
         ensemble, _ = testdata_models
         knn_model_base = FairseqKNNMockModel(ensemble)
 
@@ -211,7 +207,6 @@ class TestFairseqKNNModelBase:
         test_lprobs = torch.rand(batch_size, vocab_size)
         test_queries = torch.rand(batch_size, embed_dim)
 
-        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
         expected_knn_output = knn_model_base.search(test_queries)
         knn_probs = expected_knn_output.probs
 
@@ -255,14 +250,12 @@ class TestFairseqKNNModelBase:
         has_multiple_models,
         has_incremental,
         is_knn_ensemble,
-        monkeypatch,
     ) -> None:
         ensemble, _ = testdata_models
 
         if has_multiple_models:
             ensemble = ensemble * 2
         knn_model_base = FairseqKNNMockModel(ensemble)
-        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
 
         net_inputs = {
             "src_tokens": generate_test_data["net_input"]["src_tokens"],
@@ -330,7 +323,7 @@ class TestFairseqKNNModelBase:
         assert knn_output.probs.shape == expected_knn_output.probs.shape
         assert knn_output.indices.shape == expected_knn_output.indices.shape
 
-    def test_forward_decoder(self, generate_test_data, testdata_models, monkeypatch):
+    def test_forward_decoder(self, generate_test_data, testdata_models):
         ensemble, _ = testdata_models
         knn_model_base = FairseqKNNMockModel(ensemble)
 
@@ -348,7 +341,6 @@ class TestFairseqKNNModelBase:
                 for i in range(knn_model_base.models_size)
             ],
         )
-        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
 
         expected_lprobs, expected_attn, _ = knn_model_base.forward_decoder_with_knn(
             tokens, encoder_outs, incremental_states
