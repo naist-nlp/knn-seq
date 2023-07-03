@@ -22,11 +22,9 @@ class FairseqKNNMockModel(FairseqKNNModelBase):
         pass
 
     def search(self, querys: torch.Tensor, index_id: int = 0):
-        batch_size = 2
-        k = 2
-        scores = torch.rand(batch_size, k)
-        probs = torch.rand(batch_size, k)
-        indices = torch.zeros(batch_size, k, dtype=torch.long)
+        scores = torch.tensor([[0.4, 0.6]])
+        probs = torch.tensor([[0.4, 0.6]])
+        indices = torch.LongTensor([[4, 5]])
         return FairseqKNNModelBase.KNNOutput(scores, probs, indices)
 
 
@@ -196,35 +194,30 @@ class TestFairseqKNNModelBase:
         ]
         assert feature_sizes == expected_feature_sizes
 
-    @pytest.mark.parametrize("knn_threshold", [torch.zeros(2), None])
-    def test_add_knn_probs(self, knn_threshold, testdata_models) -> None:
+    @pytest.mark.parametrize("knn_threshold", [0.5, None])
+    @pytest.mark.parametrize("knn_weight", [0.0, 0.5, 1.0])
+    def test_add_knn_probs(self, knn_weight, knn_threshold, testdata_models) -> None:
         ensemble, _ = testdata_models
         knn_model_base = FairseqKNNMockModel(ensemble)
 
-        batch_size = 2
-        vocab_size = 20
+        batch_size = 1
+        vocab_size = 6
         embed_dim = 16
+
         test_lprobs = torch.rand(batch_size, vocab_size)
         test_queries = torch.rand(batch_size, embed_dim)
 
+        knn_model_base.knn_weight = knn_weight
         expected_knn_output = knn_model_base.search(test_queries)
         knn_probs = expected_knn_output.probs
 
-        knn_vocab_probs = knn_probs.new_zeros(*test_lprobs.size())
-        knn_vocab_probs = knn_vocab_probs.scatter_add_(
-            dim=-1, index=expected_knn_output.indices, src=knn_probs
-        )
+        # concat zero tensor for reserved symbols
+        knn_vocab_probs = torch.cat((torch.zeros(1, 4), knn_probs), dim=-1)
         knn_vocab_probs *= knn_model_base.knn_weight
         knn_vocab_probs[:, knn_model_base.pad] = 0.0
 
-        probs = torch.exp(test_lprobs)
-
         knn_model_base.knn_threshold = knn_threshold
-        lprobs, knn_output = knn_model_base.add_knn_probs(test_lprobs, test_queries)
-
-        assert knn_model_base.knn_timer.start_time is not None
-        assert knn_model_base.knn_timer.stop_time is not None
-
+        probs = torch.exp(test_lprobs)
         if knn_model_base.knn_threshold is not None:
             max_scores = torch.max(expected_knn_output.scores, dim=1).values
             update_batch_indices = max_scores.gt(knn_model_base.knn_threshold)
@@ -235,10 +228,15 @@ class TestFairseqKNNModelBase:
             probs = (1.0 - knn_model_base.knn_weight) * probs + knn_vocab_probs
         expected_lprobs = torch.log(probs)
 
-        assert lprobs.shape == expected_lprobs.shape
-        assert knn_output.scores.shape == expected_knn_output.scores.shape
-        assert knn_output.probs.shape == expected_knn_output.probs.shape
-        assert knn_output.indices.shape == expected_knn_output.indices.shape
+        lprobs, knn_output = knn_model_base.add_knn_probs(test_lprobs, test_queries)
+
+        assert knn_model_base.knn_timer.start_time is not None
+        assert knn_model_base.knn_timer.stop_time is not None
+
+        assert torch.equal(lprobs, expected_lprobs)
+        assert torch.equal(knn_output.scores, expected_knn_output.scores)
+        assert torch.equal(knn_output.probs, expected_knn_output.probs)
+        assert torch.equal(knn_output.indices, expected_knn_output.indices)
 
     @pytest.mark.parametrize("is_knn_ensemble", [True, False])
     @pytest.mark.parametrize("has_incremental", [True, False])
