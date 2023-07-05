@@ -66,6 +66,10 @@ class TranslationKnnConfig(TranslationConfig):
         default=64,
         metadata={"help": "This option is only used when using HNSW search."},
     )
+    knn_index_path: str = field(default="", metadata={"help": "Path to the kNN index."})
+    knn_value_path: str = field(
+        default="", metadata={"help": "Path to the values of datastore."}
+    )
 
     src_key: str = field(
         default="senttr", metadata={"help": "Type of source-side key."}
@@ -91,13 +95,13 @@ class TranslationKnnConfig(TranslationConfig):
         default=64,
         metadata={"help": "This option is only used when using HNSW search."},
     )
-
-    index_dirname: str = field(
-        default="index",
-        metadata={
-            "help": "Index directory name saved in fairseq binarized data directory."
-        },
+    src_index_path: str = field(
+        default="", metadata={"help": "Path to the source-side kNN index."}
     )
+    src_value_path: str = field(
+        default="", metadata={"help": "Path to the source-side values of datastore."}
+    )
+
     knn_threshold: Optional[float] = field(
         default=None,
         metadata={
@@ -254,33 +258,21 @@ class TranslationKnnTask(TranslationTask):
         subset_knn = self.cfg.src_knn_model is not None or self.cfg.src_key == "enc"
 
         knn_cuda = torch.cuda.is_available() and not self.cfg.knn_cpu
-        data_dir = fairseq_utils.split_paths(self.cfg.data)[0]
-        index_dir = os.path.join(data_dir, self.cfg.index_dirname, self.cfg.target_lang)
-        index_paths = [
-            os.path.join(
-                index_dir,
-                "{}{}.{}.{}.bin".format(
-                    "pq" if subset_knn else "index",
-                    "" if i == 0 else i,
-                    self.cfg.knn_key,
-                    self.cfg.knn_metric,
-                ),
-            )
-            for i in range(len(models))
-        ]
+        knn_index_paths = fairseq_utils.split_paths(self.cfg.knn_index_path)
+        knn_value_dir = os.path.dirname(self.cfg.knn_value_path)
         if not self.cfg.knn_ensemble:
-            index_paths = [index_paths[0]]
+            knn_index_paths = [knn_index_paths[0]]
 
-        val = TokenStorage.load(index_dir)
+        val = TokenStorage.load(knn_value_dir)
         indexes = []
-        for p in index_paths:
-            index = load_index(p)
+        for path in knn_index_paths:
+            index = load_index(path)
             index.set_nprobe(self.cfg.knn_nprobe)
             index.set_efsearch(self.cfg.knn_efsearch)
             if self.cfg.knn_gpuivf and knn_cuda:
                 index.to_gpu_search()
             indexes.append(index)
-        logger.info(f"Loaded kNN index from {','.join(index_paths)}")
+        logger.info(f"Loaded kNN index from {','.join(knn_index_paths)}")
 
         # naive kNN-MT
         if not subset_knn:
@@ -315,23 +307,14 @@ class TranslationKnnTask(TranslationTask):
                 if self.cfg.fp16:
                     src_knn_model = src_knn_model.half()
             logger.info(f"Loaded source kNN model: {src_knn_model}")
-        src_index_dir = os.path.join(
-            data_dir,
-            self.cfg.index_dirname,
-            self.cfg.source_lang + "." + self.cfg.src_key,
-        )
-        src_val = TokenStorage.load(src_index_dir)
-        src_index_path = os.path.join(
-            src_index_dir,
-            f"index.{self.cfg.src_key}.{self.cfg.src_metric}.bin",
-        )
-        src_index = FaissIndex.load(src_index_path)
+        src_value_dir = os.path.dirname(self.cfg.src_value_path)
+        src_val = TokenStorage.load(src_value_dir)
+        src_index = FaissIndex.load(self.cfg.src_index_path)
         src_index.set_nprobe(self.cfg.src_nprobe)
         src_index.set_efsearch(self.cfg.src_efsearch)
         if knn_cuda:
             src_index.to_gpu_search()
-
-        logger.info(f"Loaded source index from {src_index_path}")
+        logger.info(f"Loaded source index from {self.cfg.src_index_path}")
 
         models = FairseqSubsetKNNModel(
             models,
