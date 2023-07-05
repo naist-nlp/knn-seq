@@ -52,6 +52,7 @@ Next, construct the datastore by computing all key vectors.
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
         --num-workers ${NUM_WORKERS} \
         --fp16 \
+        --max-tokens 6000 \
         ${INDEX_DIR}
 
 Then, build the index for efficient kNN search.
@@ -146,6 +147,7 @@ Next, construct the sentence datastore.
     python knn_seq/cli/create_datastore.py \
         --outdir ${SRC_INDEX_DIR} \
         --fp16 \
+        --max-tokens 6000 \
         --feature senttr \
         sentence-transformers/LaBSE
 
@@ -173,6 +175,7 @@ Next, construct the sentence datastore.
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
         --num-workers ${NUM_WORKERS} \
         --fp16 \
+        --max-tokens 6000 \
         --store-src-sent \
         ${SRC_INDEX_DIR}
 
@@ -213,6 +216,7 @@ Generate translations using subset kNN-MT.
         --user-dir knn_seq/ \
         --task translation_knn \
         --fp16 \
+        --max-tokens 6000 \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
         --knn-key ffn_in \
         --knn-metric l2 \
@@ -233,6 +237,7 @@ Generate translations using subset kNN-MT.
         --user-dir knn_seq/ \
         --task translation_knn \
         --fp16 \
+        --max-tokens 6000 \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
         --knn-key ffn_in \
         --knn-metric l2 \
