@@ -93,7 +93,9 @@ def main(args: Namespace):
 
     dims = model.get_embed_dim()
     datastores = [
-        Datastore._open(path, size, dim, dtype)
+        Datastore._open(
+            path, size, dim, dtype, readonly=False, compress=args.compress_datastore
+        )
         for path, dim in zip(datastore_paths, dims)
     ]
     logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
@@ -154,6 +156,9 @@ def cli_main():
         "--store-src-sent",
         action="store_true",
         help="stores the features of the source sentences",
+    )
+    parser.add_argument(
+        "--compress-datastore", action="store_true", help="compress the datastore"
     )
     args = options.parse_args_and_arch(parser)
     args.task = "translation_knn"

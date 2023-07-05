@@ -64,6 +64,8 @@ def parse_args():
                              "  - senttr: using sentence-transformers")
     parser.add_argument("model_name", metavar="MODEL_NAME",
                         help="model/tokenizer name for huggingface models")
+    parser.add_argument("--compress-datastore", action="store_true",
+                        help="compress the datastore")
     # fmt: on
     return parser.parse_args()
 
@@ -86,6 +88,8 @@ def main(args):
         len(val),
         dim=model.get_embed_dim(),
         dtype=np.float16 if args.fp16 else np.float32,
+        readonly=False,
+        compress=args.compress_datastore,
     ) as ds:
         logger.info("Creating the datastore to {}".format(datastore_path))
         start_time = time()

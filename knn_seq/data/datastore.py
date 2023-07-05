@@ -56,7 +56,8 @@ class Datastore:
         size: Optional[int] = None,
         dim: Optional[int] = None,
         dtype: DTypeLike = np.float32,
-        readonly: bool = False,
+        readonly: bool = True,
+        compress: bool = False,
     ) -> "Datastore":
         """Opens the datastore memory as mmap.
 
@@ -66,6 +67,7 @@ class Datastore:
             dim (Optional[int]): dimension size.
             dtype (DtypeLike): numpy dtype. (default: np.float32)
             readonly (bool): open as read only.
+            compress (bool): compress the memory.
 
         Returns:
             Datastore: the datastore.
@@ -75,7 +77,12 @@ class Datastore:
             memory = f["memory"]
         else:
             assert size is not None and dim is not None
-            memory = f.create_dataset("memory", shape=(size, dim), dtype=dtype)
+            memory = f.create_dataset(
+                "memory",
+                shape=(size, dim),
+                dtype=dtype,
+                compression="gzip" if compress else None,
+            )
 
         self = cls(f, memory)
         return self
@@ -93,7 +100,8 @@ class Datastore:
         size: Optional[int] = None,
         dim: Optional[int] = None,
         dtype: DTypeLike = np.float32,
-        readonly: bool = False,
+        readonly: bool = True,
+        compress: bool = False,
     ):
         """Opens the datastore memory as mmap.
 
@@ -103,9 +111,12 @@ class Datastore:
             dim (Optional[int]): dimension size.
             dtype (DtypeLike): numpy dtype. (default: np.float32)
             readonly (bool): open as read only.
+            compress (bool): compress the memory.
         """
         logger.info("Opens the datastore from {}".format(path))
-        self = Datastore._open(path, size=size, dim=dim, dtype=dtype, readonly=readonly)
+        self = Datastore._open(
+            path, size=size, dim=dim, dtype=dtype, readonly=readonly, compress=compress
+        )
         logger.info("Number of datapoints: {:,}".format(len(self)))
         yield self
         self.close()
