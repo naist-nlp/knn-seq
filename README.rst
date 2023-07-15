@@ -22,7 +22,7 @@ First, preprocess the dataset for building the datastore.
 
     NUM_WORKERS=16  # specify the number of CPUs
     DATABIN_DIR=binarized
-    INDEX_DIR=${DATABIN_DIR}/index/en  # index directory must be `${binarized_data}/index/${tgt_lang}`
+    INDEX_DIR=${DATABIN_DIR}/index/en
 
     # Preprocess the validation/test set.
     fairseq-preprocess \
@@ -59,17 +59,18 @@ Then, build the index for efficient kNN search.
 
 .. code:: bash
 
+    INDEX_PATH_PREFIX=${INDEX_DIR}/index.ffn_in.l2.M64.nlist131072
+
     python knn_seq/cli/build_index.py \
-        -d ${INDEX_DIR} \
+        --datastore-path ${INDEX_DIR}/datastore.ffn_in.bin \
+        --index-path-prefix ${INDEX_PATH_PREFIX} \
         --train-size 5242880 \
         --chunk-size 10000000 \
-        --feature ffn_in \
         --metric l2 \
         --hnsw-edges 32 \  # Coarse quantizer to search nearest top-`nprobe` centroids
         --ivf-lists 131072 \  # K-means clustering
         --pq-subvec 64 \  # Product quantization (PQ) to compress the all vectors to uint8 codes.
         --use-opq \  # Rotaion vectors to minimize the PQ error.
-        --safe \
         --verbose
 
 - :code:`--hnsw-edges`: HNSW is used as coarse quantizer to search nearest top-`nprobe` centroids.
@@ -94,7 +95,10 @@ Last, generate sentences with kNN.
         --user-dir knn_seq/ \
         --task translation_knn \
         --fp16 \
+        --max-tokens 6000 \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
+        --knn-index-path ${INDEX_PATH_PREFIX}.bin \
+        --knn-value-path ${INDEX_DIR}/values.bin \
         --knn-key ffn_in \
         --knn-metric l2 \
         --knn-topk 64 \  # The number of nearest neighbors.
@@ -114,9 +118,11 @@ Subset kNN-MT quantizes the target key vectors instead of building the kNN index
 
 .. code:: bash
 
+    PQ_PATH_PREFIX=${INDEX_DIR}/pq.ffn_in.M64
+
     python knn_seq/cli/build_index.py \
-        -d ${INDEX_DIR} \
-        --outpref pq \
+        --datastore-path ${INDEX_DIR}/datastore.ffn_in.bin \
+        --index-path-prefix ${PQ_PATH_PREFIX} \
         --train-size 5242880 \
         --chunk-size 10000000 \
         --feature ffn_in \
@@ -124,7 +130,6 @@ Subset kNN-MT quantizes the target key vectors instead of building the kNN index
         --pq-subvec 64 \  # Product quantization (PQ) to compress the all vectors to uint8 codes.
         --use-pca \
         --transform-dim 256 \  # Reduce the dimension size by PCA
-        --safe \
         --verbose
 
 Next, construct the sentence datastore.
@@ -134,7 +139,8 @@ Next, construct the sentence datastore.
 .. code:: bash
 
     SRC_KEY=senttr
-    SRC_INDEX_DIR=${DATABIN_DIR}/index/de.${SRC_KEY}  # source index directory must be `{binarized_data}/index/${src_lang}.{src_key}`
+    SRC_INDEX_DIR=${DATABIN_DIR}/index/de.${SRC_KEY}
+    SRC_INDEX_PATH_PREFIX=${SRC_INDEX_DIR}/index.${SRC_KEY}.l2.nlist32768.M64
 
     # Preprocess the source text that is used for the sentence datastore.
     # In this case, give the detokenized source-side text. Sentences will be tokenized by the LaBSE tokenizer in :code:`binarize.py`.
@@ -184,17 +190,16 @@ Then, build the index of the sentence datastore.
 .. code:: bash
 
     python knn_seq/cli/build_index.py \
-        -d ${SRC_INDEX_DIR} \
+        --datastore-path ${SRC_INDEX_DIR}/datastore.${SRC_KEY}.bin \
+        --index-path-prefix ${SRC_INDEX_PATH_PREFIX} \
         --train-size 5242880 \
         --chunk-size 10000000 \
-        --feature ${SRC_KEY} \
         --metric l2 \
         --hnsw-edges 32 \  # Coarse quantizer to search nearest top-`nprobe` centroids
         --ivf-lists 32768 \  # K-means clustering
         --pq-subvec 64 \  # Product quantization (PQ) to compress the all vectors to uint8 codes.
         --use-opq \  # Rotaion vectors to minimize the PQ error.
         --transform-dim 256 \  # Reduce the dimension size.
-        --safe \
         --verbose
 
 Generate translations using subset kNN-MT.
@@ -218,6 +223,8 @@ Generate translations using subset kNN-MT.
         --fp16 \
         --max-tokens 6000 \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
+        --knn-index-path ${PQ_PATH_PREFIX}.bin \
+        --knn-value-path ${INDEX_DIR}/values.bin \
         --knn-key ffn_in \
         --knn-metric l2 \
         --knn-topk 64 \  # The number of nearest neighbors.
@@ -229,6 +236,8 @@ Generate translations using subset kNN-MT.
         --src-topk 512 \  # Search for the 512 nearest neighbor sentences of the input.
         --src-nprobe 64 \
         --src-efsearch 64 \
+        --src-index-path ${SRC_INDEX_PATH_PREFIX}.bin \
+        --src-value-path ${SRC_INDEX_DIR}/values.bin \
         ${DATABIN_DIR}
 
    # Case2: NMT encoder
@@ -239,6 +248,8 @@ Generate translations using subset kNN-MT.
         --fp16 \
         --max-tokens 6000 \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
+        --knn-index-path ${PQ_PATH_PREFIX}.bin \
+        --knn-value-path ${INDEX_DIR}/values.bin \
         --knn-key ffn_in \
         --knn-metric l2 \
         --knn-topk 64 \  # The number of nearest neighbors.
@@ -249,4 +260,6 @@ Generate translations using subset kNN-MT.
         --src-topk 512 \  # Search for the 512 nearest neighbor sentences of the input.
         --src-nprobe 64 \
         --src-efsearch 64 \
+        --src-index-path ${SRC_INDEX_PATH_PREFIX}.bin \
+        --src-value-path ${SRC_INDEX_DIR}/values.bin \
         ${DATABIN_DIR}
