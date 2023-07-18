@@ -1,3 +1,4 @@
+import copy
 from typing import Dict, List, Optional
 
 import pytest
@@ -260,14 +261,25 @@ class TestFairseqKNNModelBase:
 
     @pytest.mark.parametrize("is_knn_ensemble", [True, False])
     @pytest.mark.parametrize("has_incremental", [True, False])
+    @pytest.mark.parametrize("has_multiple_models", [True, False])
     def test_forward_decoder_with_knn(
         self,
         generate_test_data,
         testdata_models,
+        has_multiple_models,
         has_incremental,
         is_knn_ensemble,
     ) -> None:
         ensemble, _ = testdata_models
+        if has_multiple_models:
+            alt_model = copy.deepcopy(ensemble[0])
+            alt_params = alt_model.state_dict()
+            for param, value in alt_params.items():
+                alt_params[param] = torch.rand_like(value)
+
+            alt_model.load_state_dict(alt_params)
+            ensemble.append(alt_model)
+
         knn_model_base = FairseqKNNMockModel(ensemble)
         net_inputs = {
             "src_tokens": generate_test_data["net_input"]["src_tokens"],
