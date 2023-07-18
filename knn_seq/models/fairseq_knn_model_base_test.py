@@ -21,10 +21,30 @@ class FairseqKNNMockModel(FairseqKNNModelBase):
     def set_index(self):
         pass
 
-    def search(self, querys: torch.Tensor, index_id: int = 0):
-        scores = torch.tensor([[0.4, 0.6]])
-        probs = torch.tensor([[0.4, 0.6]])
-        indices = torch.LongTensor([[4, 5]])
+    def search(self, queries: torch.Tensor, index_id: int = 0):
+        batch_size = queries.size(0)
+
+        scores = torch.tensor(
+            [
+                [
+                    torch.sigmoid(queries[i][index_id]),
+                    1 - torch.sigmoid(queries[i][index_id]),
+                ]
+                for i in range(batch_size)
+            ]
+        )
+        probs = torch.tensor(
+            [
+                [
+                    torch.sigmoid(queries[i][index_id]),
+                    1 - torch.sigmoid(queries[i][index_id]),
+                ]
+                for i in range(batch_size)
+            ]
+        )
+        indices = torch.LongTensor(
+            [[i + index_id + 4, i + index_id + 5] for i in range(batch_size)]
+        )
         return FairseqKNNModelBase.KNNOutput(scores, probs, indices)
 
 
@@ -201,7 +221,7 @@ class TestFairseqKNNModelBase:
         knn_model_base = FairseqKNNMockModel(ensemble)
 
         batch_size = 1
-        vocab_size = 6
+        vocab_size = 128
         embed_dim = 16
 
         test_lprobs = torch.rand(batch_size, vocab_size)
@@ -211,8 +231,8 @@ class TestFairseqKNNModelBase:
         expected_knn_output = knn_model_base.search(test_queries)
         knn_probs = expected_knn_output.probs
 
-        # concat zero tensor for reserved symbols
-        knn_vocab_probs = torch.cat((torch.zeros(1, 4), knn_probs), dim=-1)
+        knn_vocab_probs = torch.zeros(*test_lprobs.size())
+        knn_vocab_probs[:, expected_knn_output.indices[0, :]] += knn_probs
         knn_vocab_probs *= knn_model_base.knn_weight
         knn_vocab_probs[:, knn_model_base.pad] = 0.0
 
@@ -249,7 +269,6 @@ class TestFairseqKNNModelBase:
     ) -> None:
         ensemble, _ = testdata_models
         knn_model_base = FairseqKNNMockModel(ensemble)
-
         net_inputs = {
             "src_tokens": generate_test_data["net_input"]["src_tokens"],
             "src_lengths": generate_test_data["net_input"]["src_lengths"],
