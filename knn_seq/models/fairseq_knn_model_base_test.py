@@ -1,3 +1,4 @@
+import copy
 from typing import Dict, List, Optional
 
 import pytest
@@ -21,8 +22,31 @@ class FairseqKNNMockModel(FairseqKNNModelBase):
     def set_index(self):
         pass
 
-    def search(self, querys: torch.Tensor, index_id: int = 0):
-        pass
+    def search(self, queries: torch.Tensor, index_id: int = 0):
+        batch_size = queries.size(0)
+
+        scores = torch.tensor(
+            [
+                [
+                    torch.sigmoid(queries[i][index_id]),
+                    1 - torch.sigmoid(queries[i][index_id]),
+                ]
+                for i in range(batch_size)
+            ]
+        )
+        probs = torch.tensor(
+            [
+                [
+                    torch.sigmoid(queries[i][index_id]),
+                    1 - torch.sigmoid(queries[i][index_id]),
+                ]
+                for i in range(batch_size)
+            ]
+        )
+        indices = torch.LongTensor(
+            [[i + index_id + 4, i + index_id + 5] for i in range(batch_size)]
+        )
+        return FairseqKNNModelBase.KNNOutput(scores, probs, indices)
 
 
 @pytest.fixture(scope="module")
@@ -34,15 +58,6 @@ def generate_test_data(testdata_langpair_dataset):
 class BeamableModel(nn.Module):
     def set_beam_size(self, beam_size):
         self.beam_size = beam_size
-
-
-def search(self, queries, index_id=0):
-    batch_size = 2
-    k = 2
-    scores = torch.rand(batch_size, k)
-    probs = torch.rand(batch_size, k)
-    indices = torch.zeros(batch_size, k, dtype=torch.long)
-    return FairseqKNNModelBase.KNNOutput(scores, probs, indices)
 
 
 class TestFairseqKNNModelBase:
@@ -200,36 +215,30 @@ class TestFairseqKNNModelBase:
         ]
         assert feature_sizes == expected_feature_sizes
 
-    @pytest.mark.parametrize("knn_threshold", [torch.zeros(2), None])
-    def test_add_knn_probs(self, knn_threshold, testdata_models, monkeypatch) -> None:
+    @pytest.mark.parametrize("knn_threshold", [0.5, None])
+    @pytest.mark.parametrize("knn_weight", [0.0, 0.5, 1.0])
+    def test_add_knn_probs(self, knn_weight, knn_threshold, testdata_models) -> None:
         ensemble, _ = testdata_models
         knn_model_base = FairseqKNNMockModel(ensemble)
 
-        batch_size = 2
-        vocab_size = 20
+        batch_size = 1
+        vocab_size = 128
         embed_dim = 16
+
         test_lprobs = torch.rand(batch_size, vocab_size)
         test_queries = torch.rand(batch_size, embed_dim)
 
-        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
+        knn_model_base.knn_weight = knn_weight
         expected_knn_output = knn_model_base.search(test_queries)
         knn_probs = expected_knn_output.probs
 
-        knn_vocab_probs = knn_probs.new_zeros(*test_lprobs.size())
-        knn_vocab_probs = knn_vocab_probs.scatter_add_(
-            dim=-1, index=expected_knn_output.indices, src=knn_probs
-        )
+        knn_vocab_probs = torch.zeros(*test_lprobs.size())
+        knn_vocab_probs[:, expected_knn_output.indices[0, :]] += knn_probs
         knn_vocab_probs *= knn_model_base.knn_weight
         knn_vocab_probs[:, knn_model_base.pad] = 0.0
 
-        probs = torch.exp(test_lprobs)
-
         knn_model_base.knn_threshold = knn_threshold
-        lprobs, knn_output = knn_model_base.add_knn_probs(test_lprobs, test_queries)
-
-        assert knn_model_base.knn_timer.start_time is not None
-        assert knn_model_base.knn_timer.stop_time is not None
-
+        probs = torch.exp(test_lprobs)
         if knn_model_base.knn_threshold is not None:
             max_scores = torch.max(expected_knn_output.scores, dim=1).values
             update_batch_indices = max_scores.gt(knn_model_base.knn_threshold)
@@ -240,10 +249,15 @@ class TestFairseqKNNModelBase:
             probs = (1.0 - knn_model_base.knn_weight) * probs + knn_vocab_probs
         expected_lprobs = torch.log(probs)
 
-        assert lprobs.shape == expected_lprobs.shape
-        assert knn_output.scores.shape == expected_knn_output.scores.shape
-        assert knn_output.probs.shape == expected_knn_output.probs.shape
-        assert knn_output.indices.shape == expected_knn_output.indices.shape
+        lprobs, knn_output = knn_model_base.add_knn_probs(test_lprobs, test_queries)
+
+        assert knn_model_base.knn_timer.start_time is not None
+        assert knn_model_base.knn_timer.stop_time is not None
+
+        assert torch.allclose(lprobs, expected_lprobs)
+        assert torch.allclose(knn_output.scores, expected_knn_output.scores)
+        assert torch.allclose(knn_output.probs, expected_knn_output.probs)
+        assert torch.allclose(knn_output.indices, expected_knn_output.indices)
 
     @pytest.mark.parametrize("is_knn_ensemble", [True, False])
     @pytest.mark.parametrize("has_incremental", [True, False])
@@ -255,26 +269,25 @@ class TestFairseqKNNModelBase:
         has_multiple_models,
         has_incremental,
         is_knn_ensemble,
-        monkeypatch,
     ) -> None:
         ensemble, _ = testdata_models
-
         if has_multiple_models:
-            ensemble = ensemble * 2
-        knn_model_base = FairseqKNNMockModel(ensemble)
-        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
+            alt_model = copy.deepcopy(ensemble[0])
+            alt_params = alt_model.state_dict()
+            for param, value in alt_params.items():
+                alt_params[param] = torch.rand_like(value)
 
+            alt_model.load_state_dict(alt_params)
+            ensemble.append(alt_model)
+
+        knn_model_base = FairseqKNNMockModel(ensemble)
         net_inputs = {
             "src_tokens": generate_test_data["net_input"]["src_tokens"],
             "src_lengths": generate_test_data["net_input"]["src_lengths"],
         }
-
-        encoder_outs = [model.encoder(**net_inputs) for model in ensemble]
         tokens = generate_test_data["net_input"]["prev_output_tokens"]
 
-        encoder_out = None
-        knn_queries = None
-
+        encoder_outs = [model.encoder(**net_inputs) for model in ensemble]
         incremental_states = torch.jit.annotate(
             List[Dict[str, Dict[str, Optional[Tensor]]]],
             [
@@ -282,13 +295,13 @@ class TestFairseqKNNModelBase:
                 for i in range(knn_model_base.models_size)
             ],
         )
-        ensemble_model = EnsembleModel(ensemble)
-        lprobs, attn = ensemble_model.forward_decoder(
-            tokens, encoder_outs, incremental_states
-        )
 
         knn_model_base.knn_ensemble = is_knn_ensemble
         knn_model_base.has_incremental = has_incremental
+        lprobs, attn = knn_model_base.forward_decoder(
+            tokens, encoder_outs, incremental_states
+        )
+
         for i, model in enumerate(knn_model_base.wrapped_models):
             if knn_model_base.has_encoder():
                 encoder_out = encoder_outs[i]
@@ -324,13 +337,14 @@ class TestFairseqKNNModelBase:
         lprobs, attn, knn_output = knn_model_base.forward_decoder_with_knn(
             tokens, encoder_outs, incremental_states
         )
-        assert lprobs.shape == expected_lprobs.shape
-        assert attn.shape == expected_attn.shape
-        assert knn_output.scores.shape == expected_knn_output.scores.shape
-        assert knn_output.probs.shape == expected_knn_output.probs.shape
-        assert knn_output.indices.shape == expected_knn_output.indices.shape
 
-    def test_forward_decoder(self, generate_test_data, testdata_models, monkeypatch):
+        assert torch.allclose(lprobs, expected_lprobs)
+        assert torch.allclose(attn, expected_attn)
+        assert torch.allclose(knn_output.scores, expected_knn_output.scores)
+        assert torch.allclose(knn_output.probs, expected_knn_output.probs)
+        assert torch.equal(knn_output.indices, expected_knn_output.indices)
+
+    def test_forward_decoder(self, generate_test_data, testdata_models):
         ensemble, _ = testdata_models
         knn_model_base = FairseqKNNMockModel(ensemble)
 
@@ -348,7 +362,6 @@ class TestFairseqKNNModelBase:
                 for i in range(knn_model_base.models_size)
             ],
         )
-        monkeypatch.setattr(FairseqKNNMockModel, "search", search)
 
         expected_lprobs, expected_attn, _ = knn_model_base.forward_decoder_with_knn(
             tokens, encoder_outs, incremental_states
