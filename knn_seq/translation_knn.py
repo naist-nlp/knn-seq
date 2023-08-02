@@ -114,7 +114,6 @@ class TranslationKnnConfig(TranslationConfig):
     knn_temperature: float = field(
         default=100.0, metadata={"help": "kNN softmax temperature."}
     )
-    shard_size: int = field(default=40000000, metadata={"help": "shard size."})
     knn_cpu: bool = field(default=False, metadata={"help": "use CPU to retrieve"})
     knn_ensemble: bool = field(
         default=False, metadata={"help": "Retrieve kNN in each model"}
@@ -332,7 +331,6 @@ class TranslationKnnTask(TranslationTask):
             knn_threshold=self.cfg.knn_threshold,
             knn_weight=self.cfg.knn_weight,
             src_topk=self.cfg.src_topk,
-            shard_size=self.cfg.shard_size,
             use_gpu=knn_cuda,
             use_fp16=self.cfg.fp16,
         )

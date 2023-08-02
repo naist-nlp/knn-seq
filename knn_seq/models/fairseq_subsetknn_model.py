@@ -33,7 +33,6 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         knn_weight: float = 0.5,
         src_topk: int = 16,
         precompute: bool = True,
-        shard_size: Optional[int] = None,
         use_gpu: bool = False,
         use_fp16: bool = False,
     ):
@@ -51,7 +50,6 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
             knn_weight (float): Weight for the kNN probabiltiy.
             src_topk (int): Retrieve the top-k nearest neighbor sentences.
             precompute (bool): Compute the distance between query and keys by using asymmetric distance computation (ADC).
-            shard_size (int, optional): Shard size for the distance computation in the subset search.
             use_gpu (bool): Use GPU to compute the distance.
             use_fp16 (bool): Use fp16 on the distance computation.
         """
@@ -62,11 +60,9 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         self.index = index
         self.subset_index = TorchPQIndex(
             self.index,
-            padding_idx=self.pad,
             use_gpu=use_gpu,
             use_fp16=use_fp16,
             precompute=precompute,
-            shard_size=shard_size,
         )
         self.knn_topk = knn_topk
         self.knn_temperature = knn_temperature
@@ -154,9 +150,7 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         Output:
             KNNOutput: A kNN output object.
         """
-        scores, indices = self.subset_index.search(
-            querys, k=self.knn_topk, key_padding_mask=self.subset_tokens.eq(self.pad)
-        )
+        scores, indices = self.subset_index.search(querys, k=self.knn_topk)
         bsz, subset_size = self.subset_tokens.size()
         tokens = (
             self.subset_tokens.unsqueeze(1)
