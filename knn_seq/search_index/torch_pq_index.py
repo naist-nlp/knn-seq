@@ -17,8 +17,6 @@ class TorchPQIndex(TorchPQIndexBase):
         faiss_index (FaissIndex): Wrapped faiss index.
         use_gpu (bool): Compute distances on GPUs.
         use_fp16 (bool): Compute distances on float16.
-        shard_size (int, optional): Shard size for distance computation.
-          If OOM is occured, decrease this parameter.
     """
 
     def __init__(
