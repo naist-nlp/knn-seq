@@ -20,20 +20,17 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
 
     Args:
         faiss_index (FaissIndex): Wrapped faiss index.
-        padding_idx (int): The padding index for `subset_indices`. (default: -1)
     """
 
     def __init__(
         self,
         faiss_index: FaissIndex,
-        padding_idx: int = -1,
         precompute: bool = True,
     ):
         assert faiss_index.is_trained
         nn.Module.__init__(self)
         super().__init__(faiss_index, faiss_index.config)
 
-        self.padding_idx = padding_idx
         self.precompute = precompute
         self.beam_size = 1
 
@@ -307,7 +304,6 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         self,
         querys: Tensor,
         k: int = 1,
-        key_padding_mask: Optional[BoolTensor] = None,
         idmap: Optional[LongTensor] = None,
     ) -> Tuple[FloatTensor, LongTensor]:
         """Searches the k-nearest vectors.
@@ -315,7 +311,6 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         Args:
             querys (Tensor): query vectors.
             k (int): number of nearest neighbors.
-            key_padding_mask (BoolTensor, optional): Key padding mask of shape `(bsz, subset_size)`
             idmap (LongTensor, optional): if given, maps the ids. (e.g., [3, 5] -> {0: 3, 1: 5})
 
         Returns:
@@ -324,7 +319,7 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         """
         assert self.is_trained
         querys = self.normalize(querys)
-        distances, indices = self.query(querys, k=k, key_padding_mask=key_padding_mask)
+        distances, indices = self.query(querys, k=k)
         return self.postprocess_search(distances, indices, idmap=idmap)
 
     def clear(self) -> None:

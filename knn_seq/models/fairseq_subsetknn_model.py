@@ -60,7 +60,6 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         self.index = index
         self.subset_index = TorchPQIndex(
             self.index,
-            padding_idx=self.pad,
             use_gpu=use_gpu,
             use_fp16=use_fp16,
             precompute=precompute,

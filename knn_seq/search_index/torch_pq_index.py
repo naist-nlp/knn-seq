@@ -1,9 +1,8 @@
 import logging
-import sys
 from typing import List, Optional, Tuple
 
 import torch
-from torch import BoolTensor, ByteTensor, FloatTensor, LongTensor, Tensor
+from torch import ByteTensor, FloatTensor, LongTensor, Tensor
 
 from knn_seq.search_index.faiss_index import FaissIndex
 from knn_seq.search_index.torch_pq_index_base import TorchPQIndexBase
@@ -16,7 +15,6 @@ class TorchPQIndex(TorchPQIndexBase):
 
     Args:
         faiss_index (FaissIndex): Wrapped faiss index.
-        padding_idx (int): The padding index for `subset_indices`. (default: -1)
         use_gpu (bool): Compute distances on GPUs.
         use_fp16 (bool): Compute distances on float16.
         shard_size (int, optional): Shard size for distance computation.
@@ -26,12 +24,11 @@ class TorchPQIndex(TorchPQIndexBase):
     def __init__(
         self,
         faiss_index: FaissIndex,
-        padding_idx: int = -1,
         precompute: bool = True,
         use_gpu: bool = True,
         use_fp16: bool = False,
     ):
-        super().__init__(faiss_index, padding_idx=padding_idx, precompute=precompute)
+        super().__init__(faiss_index, precompute=precompute)
         self.use_gpu = use_gpu
         self.use_fp16 = use_fp16
 
