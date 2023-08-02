@@ -38,6 +38,7 @@ class TorchPQIndexBase(SearchIndex, nn.Module):
         self.beam_size = 1
 
         index = faiss_index.index
+        self.A, self.b = None, None
         if isinstance(index, faiss.IndexPreTransform):
             vtrans = faiss.downcast_VectorTransform(index.chain.at(0))
             assert isinstance(vtrans, faiss.LinearTransform)

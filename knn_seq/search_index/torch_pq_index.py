@@ -5,7 +5,6 @@ from typing import List, Optional, Tuple
 import torch
 from torch import BoolTensor, ByteTensor, FloatTensor, LongTensor, Tensor
 
-from knn_seq import utils
 from knn_seq.search_index.faiss_index import FaissIndex
 from knn_seq.search_index.torch_pq_index_base import TorchPQIndexBase
 
@@ -31,7 +30,6 @@ class TorchPQIndex(TorchPQIndexBase):
         precompute: bool = True,
         use_gpu: bool = True,
         use_fp16: bool = False,
-        shard_size: Optional[int] = None,
     ):
         super().__init__(faiss_index, padding_idx=padding_idx, precompute=precompute)
         self.use_gpu = use_gpu
@@ -43,31 +41,31 @@ class TorchPQIndex(TorchPQIndexBase):
                 self.to_fp16()
 
         # subset search
-        self.subset_codes = None
-        self.shard_size = (
-            shard_size if shard_size is not None and self.use_gpu else sys.maxsize
-        )
+        self.subset_codes: List[Tensor] = []
 
     def to_cuda(self) -> None:
         self._codewords = self.codewords.cuda()
-        self.A = self.A.cuda()
-        self.b = self.b.cuda()
+        if self.A is not None:
+            self.A = self.A.cuda()
+        if self.b is not None:
+            self.b = self.b.cuda()
 
     def to_fp16(self) -> None:
         self._codewords = self.codewords.half()
-        self.A = self.A.half()
-        self.b = self.b.half()
+        if self.A is not None:
+            self.A = self.A.half()
+        if self.b is not None:
+            self.b = self.b.half()
 
-    def set_subsets(self, subset_indices: List[LongTensor], **kwargs) -> None:
+    def set_subsets(self, subset_indices: List[LongTensor]) -> None:
         """Sets the subsets.
 
         Args:
             subset_indices (List[LongTensor]): The indices for subset search.
         """
-        subset_indices = utils.pad(subset_indices, self.padding_idx)
-        self.subset_codes = self.codes[subset_indices]
+        self.subset_codes = [self.codes[idxs] for idxs in subset_indices]
         if self.use_gpu:
-            self.subset_codes = self.subset_codes.cuda()
+            self.subset_codes = [codes.cuda() for codes in self.subset_codes]
 
     @torch.jit.export
     def reorder_encoder_out(self, new_order: LongTensor) -> None:
@@ -75,15 +73,15 @@ class TorchPQIndex(TorchPQIndexBase):
         Args:
             new_order (LongTensor): Desired order
         """
-        new_batch_order = new_order[:: self.beam_size] // self.beam_size
-        if self.subset_codes.size(0) == len(new_batch_order):
+        new_batch_order = (new_order[:: self.beam_size] // self.beam_size).tolist()
+        if len(self.subset_codes) == len(new_batch_order):
             return
-        self.subset_codes = self.subset_codes.index_select(
-            0, new_batch_order.to(self.subset_codes.device)
-        )
+        self.subset_codes = [self.subset_codes[i] for i in new_batch_order]
 
     @torch.jit.export
-    def compute_distance_precompute(self, querys: Tensor, codes: ByteTensor) -> Tensor:
+    def compute_distance_precompute(
+        self, querys: Tensor, codes: List[ByteTensor]
+    ) -> Tensor:
         """Computes distances by the pre-computed lookup table on PQ.
 
         The distance table `(bsz, num_keys)` are computed as follows:
@@ -94,7 +92,7 @@ class TorchPQIndex(TorchPQIndexBase):
 
         Args:
             querys (Tensor): Query vectors of shape `(bbsz, D)`.
-            codes (ByteTensor): Quantized codes of shape `(bsz, num_keys, M)`.
+            codes (List[ByteTensor]): Quantized codes of shape `(num_keys, M)` x bsz.
 
         Returns:
             FloatTensor: Distance table of shape `(bsz, num_keys)`.
@@ -118,40 +116,33 @@ class TorchPQIndex(TorchPQIndexBase):
             .contiguous()
             .view(bsz, self.beam_size, self.ksub, self.M)
         )
-        subset_size = codes.size(1)
+        subset_size = max([len(x) for x in codes])
         distances = distance_lookup.new_full(
-            (bsz, self.beam_size, subset_size), float("-inf")
+            (bsz, self.beam_size, subset_size),
+            float("inf") if self.metric == "l2" else float("-inf"),
         )
 
-        shard_start = 0
-        max_bsz = self.shard_size // subset_size // self.beam_size
-        while shard_start < bsz:
-            shard_end = min(shard_start + max_bsz, bsz)
-            shard_bsz = shard_end - shard_start
-            distances[shard_start:shard_end] = (
-                distance_lookup[shard_start:shard_end]
+        for i, c in enumerate(codes):
+            distances[i, :, : len(c)] = (
+                distance_lookup[i]
                 .gather(
-                    dim=2,
-                    index=codes[shard_start:shard_end]
-                    .long()
-                    .unsqueeze(1)
-                    .expand(shard_bsz, self.beam_size, subset_size, self.M),
+                    dim=-2,
+                    index=c.long().unsqueeze(0).expand(self.beam_size, len(c), self.M),
                 )
                 .sum(dim=-1)
             )
-            shard_start = shard_end
         distances = distances.view(bbsz, subset_size).float()
 
         # distances (float): (bbsz, num_keys)
         return distances
 
     @torch.jit.export
-    def compute_distance_flat(self, querys: Tensor, codes: ByteTensor) -> Tensor:
+    def compute_distance_flat(self, querys: Tensor, codes: List[ByteTensor]) -> Tensor:
         """Computes distances by direct distance computation.
 
         Args:
             querys (Tensor): Query vectors of shape `(bbsz, D)`.
-            codes (ByteTensor): Quantized codes of shape `(bsz, num_keys, M)`.
+            codes (List[ByteTensor]): Quantized codes of shape `(num_keys, M)` x bsz.
 
         Returns:
             Tensor: Distance table of shape `(bbsz, num_keys)`.
@@ -159,36 +150,27 @@ class TorchPQIndex(TorchPQIndexBase):
         bbsz = querys.size(0)
         bsz = bbsz // self.beam_size
         querys = querys.view(bsz, self.beam_size, -1)
-        subset_size = codes.size(1)
-        distances = querys.new_full((bsz, self.beam_size, subset_size), float("-inf"))
-        shard_start = 0
-        max_bsz = self.shard_size // subset_size // self.beam_size
-        while shard_start < bsz:
-            shard_end = min(shard_start + max_bsz, bsz)
-            shard_codes = codes[shard_start:shard_end]
-            shard_keys = self.decode(shard_codes)
-            distances[shard_start:shard_end] = self.compute_distance_table(
-                querys[shard_start:shard_end], shard_keys
+        subset_size = max([len(x) for x in codes])
+        distances = querys.new_full(
+            (bsz, self.beam_size, subset_size),
+            float("inf") if self.metric == "l2" else float("-inf"),
+        )
+        for i, c in enumerate(codes):
+            distances[i, :, : len(c)] = self.compute_distance_table(
+                querys[i], self.decode(c)
             )
-            shard_start = shard_end
         distances = distances.view(bbsz, subset_size).float()
 
         # distances (float): (bbsz, num_keys)
         return distances
 
     @torch.jit.export
-    def query(
-        self,
-        querys: FloatTensor,
-        k: int = 1,
-        key_padding_mask: Optional[BoolTensor] = None,
-    ) -> Tuple[FloatTensor, LongTensor]:
+    def query(self, querys: FloatTensor, k: int = 1) -> Tuple[FloatTensor, LongTensor]:
         """Querys the k-nearest vectors to the index.
 
         Args:
             querys (FloatTensor): Query vectors of shape `(n, D)`.
             k (int): Number of nearest neighbors.
-            key_padding_mask (BoolTensor, optional): Key padding mask of shape `(bsz, subset_size)`.
 
         Returns:
             FloatTensor: Top-k distances.
@@ -213,12 +195,5 @@ class TorchPQIndex(TorchPQIndexBase):
         distances = distances.to(device)
         if self.metric == "l2":
             distances = distances.neg()
-
-        if key_padding_mask is not None:
-            distances = distances.view(-1, self.beam_size, distances.size(-1))
-            distances = distances.masked_fill_(
-                key_padding_mask.unsqueeze(1), float("-inf")
-            )
-            distances = distances.view(-1, distances.size(-1))
 
         return torch.topk(distances, k=k, dim=1)
