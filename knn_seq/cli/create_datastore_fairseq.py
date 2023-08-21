@@ -18,6 +18,7 @@ from torch import Tensor
 from tqdm import tqdm
 
 from knn_seq.data.datastore import Datastore
+from knn_seq.data.token_storage import TokenStorage
 from knn_seq.models import FairseqKNNModel
 from knn_seq.translation_knn import TranslationKnnTask
 
@@ -88,9 +89,13 @@ def main(args: Namespace):
         for i in range(len(models))
     ]
     datastore_paths = [os.path.join(task.cfg.data, fname) for fname in datastore_fnames]
-    size = len(dataset) if args.store_src_sent else sum(dataset.tgt_sizes)
-    dtype = np.float16 if cfg.common.fp16 else np.float32
 
+    if args.store_src_sent:
+        size = len(TokenStorage.load(os.path.dirname(task.cfg.src_value_path)))
+    else:
+        size = TokenStorage.load(os.path.dirname(task.cfg.knn_value_path)).size
+
+    dtype = np.float16 if cfg.common.fp16 else np.float32
     dims = model.get_embed_dim()
     datastores = [
         Datastore._open(
@@ -116,8 +121,9 @@ def main(args: Namespace):
             output_encoder_features=args.store_src_sent,
         )
         if not args.store_src_sent:
+            store_mask = prev_output_tokens[:, args.ignore_prefix_size :].ne(tgt_dict.pad())
             net_outputs = [
-                decoder_out[prev_output_tokens.ne(tgt_dict.pad())]
+                decoder_out[:, args.ignore_prefix_size :][store_mask]
                 for decoder_out in net_outputs
             ]
 
@@ -160,8 +166,13 @@ def cli_main():
     parser.add_argument(
         "--compress-datastore", action="store_true", help="compress the datastore"
     )
+    parser.add_argument(
+        "--ignore-prefix-size",
+        type=int,
+        default=0,
+        help="ignore prefix size",
+    )
     args = options.parse_args_and_arch(parser)
-    args.task = "translation_knn"
     main(args)
 
 

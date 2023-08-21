@@ -1,1 +1,2 @@
 from knn_seq.translation_knn import TranslationKnnTask
+from knn_seq.translation_knn_multi import TranslationKnnMultiTask
