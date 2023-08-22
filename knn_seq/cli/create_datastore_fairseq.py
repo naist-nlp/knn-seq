@@ -105,6 +105,7 @@ def main(args: Namespace):
         for path, dim in zip(datastore_paths, dims)
     ]
     logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
+    logger.info(f"Datastore size: {size:,}")
     start_time = time.perf_counter()
     io_res: List[concurrent.futures.Future] = []
     p = 0
