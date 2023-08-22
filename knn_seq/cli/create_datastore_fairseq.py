@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import ast
+import concurrent.futures
 import logging
 import os
 import sys
@@ -105,40 +106,46 @@ def main(args: Namespace):
     ]
     logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
     start_time = time.perf_counter()
-    feature_vectors: DefaultDict[int, List[Tensor]] = defaultdict(list)
-    for i, batch in enumerate(tqdm(epoch_iter)):
-        if use_cuda:
-            batch = fairseq_utils.move_to_cuda(batch)
-        net_input = batch["net_input"]
-        orig_order = batch["orig_order"]
-        src_tokens = net_input["src_tokens"].index_select(0, orig_order)
-        src_lengths = net_input["src_lengths"].index_select(0, orig_order)
-        prev_output_tokens = net_input["prev_output_tokens"].index_select(0, orig_order)
-        net_outputs = model.forward(
-            src_tokens=src_tokens,
-            src_lengths=src_lengths,
-            prev_output_tokens=prev_output_tokens,
-            output_encoder_features=args.store_src_sent,
-        )
-        if not args.store_src_sent:
-            store_mask = prev_output_tokens[:, args.ignore_prefix_size :].ne(tgt_dict.pad())
-            net_outputs = [
-                decoder_out[:, args.ignore_prefix_size :][store_mask]
-                for decoder_out in net_outputs
-            ]
+    io_res: List[concurrent.futures.Future] = []
+    p = 0
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        for i, batch in enumerate(tqdm(epoch_iter)):
+            if use_cuda:
+                batch = fairseq_utils.move_to_cuda(batch)
+            net_input = batch["net_input"]
+            orig_order = batch["orig_order"]
+            src_tokens = net_input["src_tokens"].index_select(0, orig_order)
+            src_lengths = net_input["src_lengths"].index_select(0, orig_order)
+            prev_output_tokens = net_input["prev_output_tokens"].index_select(
+                0, orig_order
+            )
+            net_outputs = model.forward(
+                src_tokens=src_tokens,
+                src_lengths=src_lengths,
+                prev_output_tokens=prev_output_tokens,
+                output_encoder_features=args.store_src_sent,
+            )
+            if not args.store_src_sent:
+                store_mask = prev_output_tokens[:, args.ignore_prefix_size :].ne(
+                    tgt_dict.pad()
+                )
+                net_outputs = [
+                    decoder_out[:, args.ignore_prefix_size :][store_mask]
+                    for decoder_out in net_outputs
+                ]
+            length = len(net_outputs[0])
+            for output, ds in zip(net_outputs, datastores):
+                io_res.append(
+                    executor.submit(ds.write_range, output.cpu().numpy(), p, p + length)
+                )
+            p += length
 
-        for m, output in enumerate(net_outputs):
-            feature_vectors[m].append(output.cpu())
-
-        if (i + 1) % args.save_freq == 0:
-            for m, ds in enumerate(datastores):
-                ds.add(torch.cat(feature_vectors[m]).numpy())
-                feature_vectors[m] = []
-
-    if len(feature_vectors) > 0:
-        for m, ds in enumerate(datastores):
-            ds.add(torch.cat(feature_vectors[m]).numpy())
-            feature_vectors[m] = []
+        for _ in tqdm(
+            concurrent.futures.as_completed(io_res),
+            desc="Waiting I/O",
+            total=len(io_res),
+        ):
+            continue
 
     end_time = time.perf_counter()
 
@@ -155,9 +162,6 @@ def main(args: Namespace):
 
 def cli_main():
     parser = options.get_interactive_generation_parser("translation_knn")
-    parser.add_argument(
-        "--save-freq", metavar="N", default=512, type=int, help="save frequency"
-    )
     parser.add_argument(
         "--store-src-sent",
         action="store_true",
