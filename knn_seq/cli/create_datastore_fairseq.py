@@ -110,6 +110,10 @@ def main(args: Namespace):
     io_res: List[concurrent.futures.Future] = []
     p = 0
     with concurrent.futures.ThreadPoolExecutor() as executor:
+
+        def _write(ds, vectors, begin, end):
+            return ds.write_range(vectors.cpu().numpy(), begin, end)
+
         for i, batch in enumerate(tqdm(epoch_iter)):
             if use_cuda:
                 batch = fairseq_utils.move_to_cuda(batch)
@@ -136,9 +140,7 @@ def main(args: Namespace):
                 ]
             length = len(net_outputs[0])
             for output, ds in zip(net_outputs, datastores):
-                io_res.append(
-                    executor.submit(ds.write_range, output.cpu().numpy(), p, p + length)
-                )
+                io_res.append(executor.submit(_write, ds, output, p, p + length))
             p += length
 
         for _ in tqdm(
