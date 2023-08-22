@@ -207,7 +207,6 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
         args,
         seq_gen_cls=None,
         extra_gen_cls_kwargs=None,
-        prefix_allowed_tokens_fn=None,
     ):
         """
         Build a :class:`~fairseq.SequenceGenerator` instance for this
@@ -219,19 +218,6 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
                 configuration object (dataclass) for generation
             extra_gen_cls_kwargs (Dict[str, Any]): extra options to pass
                 through to SequenceGenerator
-            prefix_allowed_tokens_fn (Callable[[int, torch.Tensor], List[int]]):
-                If provided, this function constrains the beam search to
-                allowed tokens only at each step. The provided function
-                should take 2 arguments: the batch ID (`batch_id: int`)
-                and a unidimensional tensor of token ids (`inputs_ids:
-                torch.Tensor`). It has to return a `List[int]` with the
-                allowed tokens for the next generation step conditioned
-                on the previously generated tokens (`inputs_ids`) and
-                the batch ID (`batch_id`). This argument is useful for
-                constrained generation conditioned on the prefix, as
-                described in "Autoregressive Entity Retrieval"
-                (https://arxiv.org/abs/2010.00904) and
-                https://github.com/facebookresearch/GENRE.
         """
 
         if not getattr(args, "keep_inference_langtok", False):
@@ -249,7 +235,6 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
                 args,
                 seq_gen_cls=seq_gen_cls,
                 extra_gen_cls_kwargs=extra_gen_cls_kwargs,
-                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             )
 
         subset_knn = self.args.src_knn_model is not None or self.args.src_key == "enc"
@@ -291,7 +276,6 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
                 args,
                 seq_gen_cls=seq_gen_cls,
                 extra_gen_cls_kwargs=extra_gen_cls_kwargs,
-                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             )
 
         # subset kNN-MT
@@ -337,7 +321,6 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
             args,
             seq_gen_cls=seq_gen_cls,
             extra_gen_cls_kwargs=extra_gen_cls_kwargs,
-            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
         )
 
     def inference_step(
