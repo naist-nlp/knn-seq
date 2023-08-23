@@ -1,5 +1,5 @@
 import re
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
 from transformers import AutoTokenizer
 from transformers.tokenization_utils import BatchEncoding
@@ -30,18 +30,28 @@ class HFTokenizer:
         tokenizer (Any): wrapped tokenizer or dictionary class.
         pretokenized (bool): processes as tokenized text.
         use_gpu (bool): use GPU.
+        device (int, optional): CUDA device.
     """
 
     def __init__(
-        self, tokenizer: Any, pretokenized: bool = False, use_gpu: bool = False
+        self,
+        tokenizer: Any,
+        pretokenized: bool = False,
+        use_gpu: bool = False,
+        device: Optional[int] = None,
     ) -> None:
         self.tokenizer = tokenizer
         self.pretokenized = pretokenized
         self.use_gpu = use_gpu
+        self.device = device
 
     @classmethod
     def build_tokenizer(
-        cls, name_or_path: str, pretokenized: bool = False, use_gpu: bool = False
+        cls,
+        name_or_path: str,
+        pretokenized: bool = False,
+        use_gpu: bool = False,
+        device: Optional[int] = None,
     ) -> "HFTokenizer":
         """Builds a tokenizer.
 
@@ -49,12 +59,13 @@ class HFTokenizer:
             name_or_path (str): model name or path.
             pretokenized (bool): processes as tokenized text.
             use_gpu (bool): use GPU.
+            device (int, optional): CUDA device.
 
         Returns:
             HFTokenizer: this class.
         """
         tokenizer = AutoTokenizer.from_pretrained(name_or_path)
-        return cls(tokenizer, pretokenized=pretokenized, use_gpu=use_gpu)
+        return cls(tokenizer, pretokenized=pretokenized, use_gpu=use_gpu, device=device)
 
     def encode(self, line: Union[str, List[str]]) -> List[int]:
         """Encodes a line.
@@ -97,6 +108,7 @@ class HFTokenizer:
                 None,
                 add_spenical_tokens=True,
                 padding=False,
+                truncation=True,
                 pad_to_multiple_of=None,
                 return_attention_mask=False,
                 return_tensors=None,
@@ -108,7 +120,7 @@ class HFTokenizer:
 
         batch = self.tokenizer.pad(batch, padding=True, return_tensors="pt")
         if self.use_gpu:
-            batch = utils.to_device(batch, use_gpu=self.use_gpu)
+            batch = utils.to_device(batch, use_gpu=self.use_gpu, device=self.device)
         return BatchEncoding(batch)
 
     def encode_lines(self, lines: List[str]) -> List[List[int]]:

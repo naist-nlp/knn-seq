@@ -3,8 +3,7 @@ import logging
 import time
 from collections import UserDict, UserList
 from concurrent import futures
-from itertools import chain
-from typing import Any, Callable, Iterable, Iterator, List, TypeVar
+from typing import Any, Callable, Iterable, Iterator, List, Optional, TypeVar
 
 import fairseq
 import numpy as np
@@ -99,12 +98,13 @@ def to_ndarray(x):
     return np.array(x)
 
 
-def to_device(item: Any, use_gpu: bool = True) -> Any:
+def to_device(item: Any, use_gpu: bool = True, device: Optional[int] = None) -> Any:
     """Transfers tensors in arbitrary data structres to a specific device.
 
     Args:
         item (Any): arbitrary data structures.
         use_gpu (bool): if True, tensors in `item` are transfered to GPUs, otherwise to CPUs.
+        device (int, optional): CUDA device.
 
     Returns:
         Any: the object that is trasfered to the device.
@@ -112,7 +112,7 @@ def to_device(item: Any, use_gpu: bool = True) -> Any:
     item_type = type(item)
     if torch.is_tensor(item):
         if use_gpu:
-            return item.cuda()
+            return item.cuda(device=device)
         return item.cpu()
     elif isinstance(item, (dict, UserDict)):
         return item_type({k: to_device(v, use_gpu=use_gpu) for k, v in item.items()})
