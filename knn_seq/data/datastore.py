@@ -72,7 +72,7 @@ class Datastore:
         Returns:
             Datastore: the datastore.
         """
-        f = h5py.File(path, mode="r" if readonly else "w")
+        f = h5py.File(path, mode="r" if readonly else "a")
         if readonly:
             memory = f["memory"]
         else:
@@ -133,3 +133,14 @@ class Datastore:
         assert self._write_pointer + length <= len(self)
         self._memory[self._write_pointer : self._write_pointer + length] = keys
         self._write_pointer += length
+
+    def write_range(self, keys: NDArray, begin: int, end: int) -> None:
+        """Writes key vectors to the datastore.
+
+        Args:
+            keys (NDArray): key vectors.
+            begin (int): the beginning position. (inclusive)
+            end (int): the end position. (exclusive)
+        """
+        assert len(keys) == end - begin
+        self._memory[begin:end] = keys

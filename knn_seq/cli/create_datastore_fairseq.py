@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import ast
+import concurrent.futures
+import copy
 import logging
 import os
 import sys
@@ -60,15 +62,15 @@ def main(args: Namespace):
     for model in models:
         if model is None:
             continue
-        if use_cuda:
-            model.cuda()
         model.prepare_for_inference_(cfg)
 
     model = FairseqKNNModel(models, key=task.cfg.knn_key)
     if use_cuda:
-        model = model.cuda()
+        model_replicas = [copy.deepcopy(model).cuda(i) for i in range(args.num_gpus)]
         if cfg.common.fp16:
-            model = model.half()
+            model_replicas = [m.half() for m in model_replicas]
+    else:
+        model_replicas = [model]
 
     # Load the dataset
     task.load_dataset("train")
@@ -99,40 +101,62 @@ def main(args: Namespace):
         for path, dim in zip(datastore_paths, dims)
     ]
     logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
+    logger.info(f"Datastore size: {size:,}")
+
     start_time = time.perf_counter()
-    feature_vectors: DefaultDict[int, List[Tensor]] = defaultdict(list)
-    for i, batch in enumerate(tqdm(epoch_iter)):
-        if use_cuda:
-            batch = fairseq_utils.move_to_cuda(batch)
-        net_input = batch["net_input"]
-        orig_order = batch["orig_order"]
-        src_tokens = net_input["src_tokens"].index_select(0, orig_order)
-        src_lengths = net_input["src_lengths"].index_select(0, orig_order)
-        prev_output_tokens = net_input["prev_output_tokens"].index_select(0, orig_order)
-        net_outputs = model.forward(
-            src_tokens=src_tokens,
-            src_lengths=src_lengths,
-            prev_output_tokens=prev_output_tokens,
-            output_encoder_features=args.store_src_sent,
-        )
-        if not args.store_src_sent:
-            net_outputs = [
-                decoder_out[prev_output_tokens.ne(tgt_dict.pad())]
-                for decoder_out in net_outputs
-            ]
+    with concurrent.futures.ThreadPoolExecutor() as writer:
+        io_res: List[concurrent.futures.Future] = []
 
-        for m, output in enumerate(net_outputs):
-            feature_vectors[m].append(output.cpu())
+        with concurrent.futures.ThreadPoolExecutor() as executor:
 
-        if (i + 1) % args.save_freq == 0:
-            for m, ds in enumerate(datastores):
-                ds.add(torch.cat(feature_vectors[m]).numpy())
-                feature_vectors[m] = []
+            def _add_examples(rank, batch, begin, end):
+                if use_cuda:
+                    batch = fairseq_utils.move_to_cuda(batch, f"cuda:{rank}")
+                net_input = batch["net_input"]
+                orig_order = batch["orig_order"]
+                src_tokens = net_input["src_tokens"].index_select(0, orig_order)
+                src_lengths = net_input["src_lengths"].index_select(0, orig_order)
+                prev_output_tokens = net_input["prev_output_tokens"].index_select(
+                    0, orig_order
+                )
+                net_outputs = model_replicas[rank](
+                    src_tokens=src_tokens,
+                    src_lengths=src_lengths,
+                    prev_output_tokens=prev_output_tokens,
+                    output_encoder_features=args.store_src_sent,
+                )
+                if not args.store_src_sent:
+                    net_outputs = [
+                        decoder_out[prev_output_tokens.ne(tgt_dict.pad())]
+                        for decoder_out in net_outputs
+                    ]
+                for keys, ds in zip(net_outputs, datastores):
+                    io_res.append(
+                        writer.submit(ds.write_range, keys.cpu().numpy(), begin, end)
+                    )
 
-    if len(feature_vectors) > 0:
-        for m, ds in enumerate(datastores):
-            ds.add(torch.cat(feature_vectors[m]).numpy())
-            feature_vectors[m] = []
+            wp = 0
+            forward_res: List[concurrent.futures.Future] = []
+            for i, batch in enumerate(tqdm(epoch_iter)):
+                if args.store_src_sent:
+                    length = len(batch["id"])
+                else:
+                    prev_output_tokens = batch["net_input"][
+                        "prev_output_tokens"
+                    ].index_select(0, orig_order=batch["orig_order"])
+                    store_mask = prev_output_tokens.ne(tgt_dict.pad())
+                    length = store_mask.sum().item()
+
+                rank = i % args.num_gpus if use_cuda else 0
+                forward_res.append(
+                    executor.submit(_add_examples, rank, batch, wp, wp + length)
+                )
+                wp += length
+                if len(forward_res) >= len(model_replicas):
+                    concurrent.futures.wait(forward_res)
+                    forward_res = []
+            concurrent.futures.wait(forward_res)
+        concurrent.futures.wait(io_res)
 
     end_time = time.perf_counter()
 
@@ -150,7 +174,7 @@ def main(args: Namespace):
 def cli_main():
     parser = options.get_interactive_generation_parser("translation_knn")
     parser.add_argument(
-        "--save-freq", metavar="N", default=512, type=int, help="save frequency"
+        "--num-gpus", type=int, default=1, help="number of GPUs to compute keys"
     )
     parser.add_argument(
         "--store-src-sent",
@@ -161,7 +185,6 @@ def cli_main():
         "--compress-datastore", action="store_true", help="compress the datastore"
     )
     args = options.parse_args_and_arch(parser)
-    args.task = "translation_knn"
     main(args)
 
 
