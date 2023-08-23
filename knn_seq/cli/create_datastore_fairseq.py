@@ -2,20 +2,22 @@
 
 import ast
 import concurrent.futures
+import copy
 import logging
 import os
 import sys
 import time
 from argparse import Namespace
-from collections import defaultdict
-from typing import DefaultDict, List
+from collections import deque
+from threading import Lock
+from typing import Any, Dict, List
 
 import fairseq.utils as fairseq_utils
 import numpy as np
 import torch
 from fairseq import checkpoint_utils, options, tasks
+from fairseq.data.iterators import GroupedIterator
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
-from torch import Tensor
 from tqdm import tqdm
 
 from knn_seq.data.datastore import Datastore
@@ -62,15 +64,17 @@ def main(args: Namespace):
     for model in models:
         if model is None:
             continue
-        if use_cuda:
-            model.cuda()
         model.prepare_for_inference_(cfg)
 
     model = FairseqKNNModel(models, key=task.cfg.knn_key)
     if use_cuda:
-        model = model.cuda()
+        model_replicas = [copy.deepcopy(model).cuda(i) for i in range(args.num_gpus)]
         if cfg.common.fp16:
-            model = model.half()
+            model_replicas = [m.half() for m in model_replicas]
+    else:
+        model_replicas = [model]
+
+    num_replicas = len(model_replicas)
 
     # Load the dataset
     task.load_dataset("train")
@@ -104,19 +108,18 @@ def main(args: Namespace):
         )
         for path, dim in zip(datastore_paths, dims)
     ]
-    logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
-    logger.info(f"Datastore size: {size:,}")
-    start_time = time.perf_counter()
-    io_res: List[concurrent.futures.Future] = []
-    p = 0
-    with concurrent.futures.ThreadPoolExecutor() as executor:
 
-        def _write(ds, vectors, begin, end):
-            return ds.write_range(vectors.cpu().numpy(), begin, end)
-
-        for i, batch in enumerate(tqdm(epoch_iter)):
+    def _add_examples(
+        rank: int,
+        lock: Lock,
+        model: FairseqKNNModel,
+        batch: Dict[str, Any],
+        begin: int,
+        end: int,
+    ):
+        with lock:
             if use_cuda:
-                batch = fairseq_utils.move_to_cuda(batch)
+                batch = fairseq_utils.move_to_cuda(batch, f"cuda:{rank}")
             net_input = batch["net_input"]
             orig_order = batch["orig_order"]
             src_tokens = net_input["src_tokens"].index_select(0, orig_order)
@@ -124,7 +127,7 @@ def main(args: Namespace):
             prev_output_tokens = net_input["prev_output_tokens"].index_select(
                 0, orig_order
             )
-            net_outputs = model.forward(
+            net_outputs = model(
                 src_tokens=src_tokens,
                 src_lengths=src_lengths,
                 prev_output_tokens=prev_output_tokens,
@@ -138,17 +141,50 @@ def main(args: Namespace):
                     decoder_out[:, args.ignore_prefix_size :][store_mask]
                     for decoder_out in net_outputs
                 ]
-            length = len(net_outputs[0])
-            for output, ds in zip(net_outputs, datastores):
-                io_res.append(executor.submit(_write, ds, output, p, p + length))
-            p += length
+            for keys, ds in zip(net_outputs, datastores):
+                ds.write_range(keys.cpu().numpy(), begin, end)
 
-        for _ in tqdm(
-            concurrent.futures.as_completed(io_res),
-            desc="Waiting I/O",
-            total=len(io_res),
-        ):
-            continue
+    logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
+    logger.info(f"Datastore size: {size:,}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_replicas) as executor:
+        locks = [Lock() for _ in range(num_replicas)]
+        wp = 0
+        workers = set()
+        empties = deque(range(num_replicas))
+        start_time = time.perf_counter()
+        for batch in tqdm(epoch_iter):
+            if args.store_src_sent:
+                length = len(batch["id"])
+            else:
+                length = (
+                    batch["net_input"]["prev_output_tokens"]
+                    .ne(tgt_dict.pad())
+                    .sum()
+                    .item()
+                )
+            rank = empties.popleft()
+            workers.add(
+                executor.submit(
+                    _add_examples,
+                    rank,
+                    locks[rank],
+                    model_replicas[rank],
+                    batch,
+                    wp,
+                    wp + length,
+                )
+            )
+            wp += length
+
+            if len(empties) <= 0:
+                # Wait until one worker is finished.
+                workers = concurrent.futures.wait(
+                    workers, return_when="FIRST_COMPLETED"
+                )[1]
+                while len(empties) <= 0:
+                    # Slight delay in unlocking may occur
+                    empties = deque(i for i, lock in enumerate(locks) if not lock.locked())
+                    time.sleep(0.1)
 
     end_time = time.perf_counter()
 
@@ -165,6 +201,9 @@ def main(args: Namespace):
 
 def cli_main():
     parser = options.get_interactive_generation_parser("translation_knn")
+    parser.add_argument(
+        "--num-gpus", type=int, default=1, help="number of GPUs to compute keys"
+    )
     parser.add_argument(
         "--store-src-sent",
         action="store_true",
