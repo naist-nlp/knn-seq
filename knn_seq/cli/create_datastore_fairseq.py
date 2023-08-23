@@ -8,6 +8,7 @@ import os
 import sys
 import time
 from argparse import Namespace
+from collections import deque
 from threading import Lock
 from typing import Any, Dict, List
 
@@ -83,7 +84,6 @@ def main(args: Namespace):
         max_sentences=cfg.dataset.batch_size,
         num_workers=cfg.dataset.num_workers,
     ).next_epoch_itr(shuffle=False)
-    itr = GroupedIterator(epoch_iter, num_replicas)
 
     datastore_fnames = [
         "datastore{}.{}.bin".format(
@@ -141,35 +141,42 @@ def main(args: Namespace):
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_replicas) as executor:
         locks = [Lock() for _ in range(num_replicas)]
         wp = 0
+        workers = set()
+        empties = deque(range(num_replicas))
         start_time = time.perf_counter()
-
-        # `itr` (GroupedIterator) yields a list of batches.
-        for batches in tqdm(itr):
+        for batch in tqdm(epoch_iter):
             if args.store_src_sent:
-                lengths = [len(batch["id"]) for batch in batches]
+                length = len(batch["id"])
             else:
-                lengths = [
+                length = (
                     batch["net_input"]["prev_output_tokens"]
                     .ne(tgt_dict.pad())
                     .sum()
                     .item()
-                    for batch in batches
-                ]
-            offsets = np.cumsum([wp] + lengths).tolist()
+                )
+            rank = empties.popleft()
+            workers.add(
+                executor.submit(
+                    _add_examples,
+                    rank,
+                    locks[rank],
+                    model_replicas[rank],
+                    batch,
+                    wp,
+                    wp + length,
+                )
+            )
+            wp += length
 
-            # The last batches may be less than the number of shards.
-            # `executor.map()` works well because it matches the length of the shortest iterator.
-            for _ in executor.map(
-                _add_examples,
-                range(num_replicas),
-                locks,
-                model_replicas,
-                batches,
-                offsets[:-1],
-                offsets[1:],
-            ):
-                break
-            wp = offsets[-1]
+            if len(empties) <= 0:
+                # Wait until one worker is finished.
+                workers = concurrent.futures.wait(
+                    workers, return_when="FIRST_COMPLETED"
+                )[1]
+                while len(empties) <= 0:
+                    # Slight delay in unlocking may occur
+                    empties = deque(i for i, lock in enumerate(locks) if not lock.locked())
+                    time.sleep(0.1)
 
     end_time = time.perf_counter()
 
