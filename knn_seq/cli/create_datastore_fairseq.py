@@ -8,15 +8,15 @@ import os
 import sys
 import time
 from argparse import Namespace
-from collections import defaultdict
-from typing import DefaultDict, List
+from threading import Lock
+from typing import Any, Dict, List
 
 import fairseq.utils as fairseq_utils
 import numpy as np
 import torch
 from fairseq import checkpoint_utils, options, tasks
+from fairseq.data.iterators import GroupedIterator
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
-from torch import Tensor
 from tqdm import tqdm
 
 from knn_seq.data.datastore import Datastore
@@ -72,6 +72,8 @@ def main(args: Namespace):
     else:
         model_replicas = [model]
 
+    num_replicas = len(model_replicas)
+
     # Load the dataset
     task.load_dataset("train")
     dataset = task.dataset("train")
@@ -81,6 +83,7 @@ def main(args: Namespace):
         max_sentences=cfg.dataset.batch_size,
         num_workers=cfg.dataset.num_workers,
     ).next_epoch_itr(shuffle=False)
+    itr = GroupedIterator(epoch_iter, num_replicas)
 
     datastore_fnames = [
         "datastore{}.{}.bin".format(
@@ -100,63 +103,72 @@ def main(args: Namespace):
         )
         for path, dim in zip(datastore_paths, dims)
     ]
+
+    def _add_examples(
+        rank: int,
+        lock: Lock,
+        model: FairseqKNNModel,
+        batch: Dict[str, Any],
+        begin: int,
+        end: int,
+    ):
+        with lock:
+            if use_cuda:
+                batch = fairseq_utils.move_to_cuda(batch, f"cuda:{rank}")
+            net_input = batch["net_input"]
+            orig_order = batch["orig_order"]
+            src_tokens = net_input["src_tokens"].index_select(0, orig_order)
+            src_lengths = net_input["src_lengths"].index_select(0, orig_order)
+            prev_output_tokens = net_input["prev_output_tokens"].index_select(
+                0, orig_order
+            )
+            net_outputs = model(
+                src_tokens=src_tokens,
+                src_lengths=src_lengths,
+                prev_output_tokens=prev_output_tokens,
+                output_encoder_features=args.store_src_sent,
+            )
+            if not args.store_src_sent:
+                net_outputs = [
+                    decoder_out[prev_output_tokens.ne(tgt_dict.pad())]
+                    for decoder_out in net_outputs
+                ]
+            for keys, ds in zip(net_outputs, datastores):
+                ds.write_range(keys.cpu().numpy(), begin, end)
+
     logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
     logger.info(f"Datastore size: {size:,}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_replicas) as executor:
+        locks = [Lock() for _ in range(num_replicas)]
+        wp = 0
+        start_time = time.perf_counter()
 
-    start_time = time.perf_counter()
-    with concurrent.futures.ThreadPoolExecutor() as writer:
-        io_res: List[concurrent.futures.Future] = []
+        # `itr` (GroupedIterator) yields a list of batches.
+        for batches in tqdm(itr):
+            if args.store_src_sent:
+                lengths = [len(batch["id"]) for batch in batches]
+            else:
+                lengths = [
+                    batch["net_input"]["prev_output_tokens"]
+                    .ne(tgt_dict.pad())
+                    .sum()
+                    .item()
+                    for batch in batches
+                ]
+            offsets = np.cumsum([wp] + lengths).tolist()
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-
-            def _add_examples(rank, batch, begin, end):
-                if use_cuda:
-                    batch = fairseq_utils.move_to_cuda(batch, f"cuda:{rank}")
-                net_input = batch["net_input"]
-                orig_order = batch["orig_order"]
-                src_tokens = net_input["src_tokens"].index_select(0, orig_order)
-                src_lengths = net_input["src_lengths"].index_select(0, orig_order)
-                prev_output_tokens = net_input["prev_output_tokens"].index_select(
-                    0, orig_order
-                )
-                net_outputs = model_replicas[rank](
-                    src_tokens=src_tokens,
-                    src_lengths=src_lengths,
-                    prev_output_tokens=prev_output_tokens,
-                    output_encoder_features=args.store_src_sent,
-                )
-                if not args.store_src_sent:
-                    net_outputs = [
-                        decoder_out[prev_output_tokens.ne(tgt_dict.pad())]
-                        for decoder_out in net_outputs
-                    ]
-                for keys, ds in zip(net_outputs, datastores):
-                    io_res.append(
-                        writer.submit(ds.write_range, keys.cpu().numpy(), begin, end)
-                    )
-
-            wp = 0
-            forward_res: List[concurrent.futures.Future] = []
-            for i, batch in enumerate(tqdm(epoch_iter)):
-                if args.store_src_sent:
-                    length = len(batch["id"])
-                else:
-                    prev_output_tokens = batch["net_input"][
-                        "prev_output_tokens"
-                    ].index_select(0, orig_order=batch["orig_order"])
-                    store_mask = prev_output_tokens.ne(tgt_dict.pad())
-                    length = store_mask.sum().item()
-
-                rank = i % args.num_gpus if use_cuda else 0
-                forward_res.append(
-                    executor.submit(_add_examples, rank, batch, wp, wp + length)
-                )
-                wp += length
-                if len(forward_res) >= len(model_replicas):
-                    concurrent.futures.wait(forward_res)
-                    forward_res = []
-            concurrent.futures.wait(forward_res)
-        concurrent.futures.wait(io_res)
+            # The last batches may be less than the number of shards.
+            # `executor.map()` works well because it matches the length of the shortest iterator.
+            executor.map(
+                _add_examples,
+                range(num_replicas),
+                locks,
+                model_replicas,
+                batches,
+                offsets[:-1],
+                offsets[1:],
+            )
+            wp = offsets[-1]
 
     end_time = time.perf_counter()
 
