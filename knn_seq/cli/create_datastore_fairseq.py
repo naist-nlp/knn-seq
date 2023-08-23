@@ -157,7 +157,9 @@ def main(args: Namespace):
                 length = len(batch["id"])
             else:
                 length = (
-                    batch["net_input"]["prev_output_tokens"]
+                    batch["net_input"]["prev_output_tokens"][
+                        :, args.ignore_prefix_size :
+                    ]
                     .ne(tgt_dict.pad())
                     .sum()
                     .item()
@@ -183,7 +185,9 @@ def main(args: Namespace):
                 )[1]
                 while len(empties) <= 0:
                     # Slight delay in unlocking may occur
-                    empties = deque(i for i, lock in enumerate(locks) if not lock.locked())
+                    empties = deque(
+                        i for i, lock in enumerate(locks) if not lock.locked()
+                    )
                     time.sleep(0.1)
 
     end_time = time.perf_counter()
