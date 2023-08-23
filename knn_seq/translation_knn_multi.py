@@ -285,7 +285,7 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
             src_knn_model = build_hf_model(self.args.src_knn_model, self.args.src_key)
             if knn_cuda:
                 src_knn_model = src_knn_model.cuda()
-                if self.args.fp16:
+                if args.fp16:
                     src_knn_model = src_knn_model.half()
             logger.info(f"Loaded source kNN model: {src_knn_model}")
         src_value_dir = os.path.dirname(self.args.src_value_path)
