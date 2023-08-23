@@ -159,7 +159,7 @@ def main(args: Namespace):
 
             # The last batches may be less than the number of shards.
             # `executor.map()` works well because it matches the length of the shortest iterator.
-            executor.map(
+            for _ in executor.map(
                 _add_examples,
                 range(num_replicas),
                 locks,
@@ -167,7 +167,8 @@ def main(args: Namespace):
                 batches,
                 offsets[:-1],
                 offsets[1:],
-            )
+            ):
+                break
             wp = offsets[-1]
 
     end_time = time.perf_counter()
