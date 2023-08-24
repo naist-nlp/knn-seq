@@ -60,6 +60,8 @@ def parse_args():
                         help="Use PCA")
     parser.add_argument("--transform-dim", metavar="N", type=int, default=-1,
                         help="the dimension size of vector transform")
+    parser.add_argument("--save-freq", metavar="N", type=int, default=-1,
+                        help="Save an index every N times.")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Displays the verbose messages.")
     # fmt: on
@@ -133,12 +135,13 @@ def main(args: Namespace):
             index.add(ds[start_idx:end_idx])
             logger.info(f"Index size: {len(index):,}")
 
-            save_start_time = time.perf_counter()
-            index.save(index_path)
-            save_end_time = time.perf_counter()
-            logger.info(
-                "Saved index in {:.1f} seconds.".format(save_end_time - save_start_time)
-            )
+            if args.save_freq > 0 and (i + 1) % args.save_freq == 0:
+                save_start_time = time.perf_counter()
+                index.save(index_path)
+                save_end_time = time.perf_counter()
+                logger.info(
+                    "Saved index in {:.1f} seconds.".format(save_end_time - save_start_time)
+                )
 
     index.save(index_path)
     end_time = time.perf_counter()
