@@ -115,9 +115,11 @@ def to_device(item: Any, use_gpu: bool = True, device: Optional[int] = None) -> 
             return item.cuda(device=device)
         return item.cpu()
     elif isinstance(item, (dict, UserDict)):
-        return item_type({k: to_device(v, use_gpu=use_gpu) for k, v in item.items()})
+        return item_type(
+            {k: to_device(v, use_gpu=use_gpu, device=device) for k, v in item.items()}
+        )
     elif isinstance(item, (list, UserList)):
-        return item_type([to_device(x, use_gpu=use_gpu) for x in item])
+        return item_type([to_device(x, use_gpu=use_gpu, device=device) for x in item])
     else:
         return item
 
