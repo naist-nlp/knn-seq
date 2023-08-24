@@ -10,13 +10,12 @@ import time
 from argparse import Namespace
 from collections import deque
 from threading import Lock
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import fairseq.utils as fairseq_utils
 import numpy as np
 import torch
 from fairseq import checkpoint_utils, options, tasks
-from fairseq.data.iterators import GroupedIterator
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from tqdm import tqdm
 
@@ -147,10 +146,13 @@ def main(args: Namespace):
     logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
     logger.info(f"Datastore size: {size:,}")
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_replicas) as executor:
-        locks = [Lock() for _ in range(num_replicas)]
-        wp = 0
+        # - `workers` are used to keep track of the reference to futures.
+        # - `empties` are used to keep track of actual worker instance and
+        #   assign a worker to an empty device.
         workers = set()
         empties = deque(range(num_replicas))
+        locks = [Lock() for _ in range(num_replicas)]
+        wp = 0
         start_time = time.perf_counter()
         for batch in tqdm(epoch_iter):
             if args.store_src_sent:
@@ -180,11 +182,15 @@ def main(args: Namespace):
 
             if len(empties) <= 0:
                 # Wait until one worker is finished.
-                workers = concurrent.futures.wait(
-                    workers, return_when="FIRST_COMPLETED"
-                )[1]
+                _, workers = concurrent.futures.wait(
+                    workers, return_when=concurrent.futures.FIRST_COMPLETED
+                )
                 while len(empties) <= 0:
-                    # Slight delay in unlocking may occur
+                    # TODO(deguchi): Investigate why this sleep is needed and solve it.
+                    # Sometimes the number of unlocked will be 0, although a worker
+                    # is finished.
+                    # I think there may be a slight difference in the timing of when
+                    # wait sends the worker's termination and when the lock is released.
                     empties = deque(
                         i for i, lock in enumerate(locks) if not lock.locked()
                     )
