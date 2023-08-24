@@ -176,7 +176,11 @@ def main(args: Namespace):
                     workers, return_when=concurrent.futures.FIRST_COMPLETED
                 )
                 while len(empties) <= 0:
-                    # Slight delay in unlocking may occur
+                    # TODO(deguchi): Investigate why this sleep is needed and solve it.
+                    # Sometimes the number of unlocked will be 0, although a worker
+                    # is finished.
+                    # I think there may be a slight difference in the timing of when
+                    # wait sends the worker's termination and when the lock is released.
                     empties = deque(
                         i for i, lock in enumerate(locks) if not lock.locked()
                     )
