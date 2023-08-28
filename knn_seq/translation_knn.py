@@ -368,4 +368,5 @@ class TranslationKnnTask(TranslationTask):
                 src_knn_i = model.src_knn[i]
                 print("R-{}\t{}".format(sample_id, " ".join(map(str, src_knn_i))))
 
+        model.clear_cache()
         return results

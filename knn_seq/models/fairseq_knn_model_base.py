@@ -71,6 +71,9 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
         super().set_decoder_beam_size(beam_size)
         self.beam_size = beam_size
 
+    def clear_cache(self) -> None:
+        """Clear the cache."""
+
     def forward(
         self,
         src_tokens: LongTensor,
