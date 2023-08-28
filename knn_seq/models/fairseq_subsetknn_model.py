@@ -87,6 +87,23 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         self.beam_size = beam_size
         self.subset_index.set_beam_size(beam_size)
 
+    def clear_cache(self) -> None:
+        """Clear the caches.
+
+        Subset kNN-MT has the following two caches on a CUDA memory during decoding.
+        - `subset_tokens` (Tensor): Vocabulary IDs of the subset tokens of shape
+           `(batch_size, max_subset_size)`.
+        - `subset_index.subset_codes` (List[Tensor]): A list of uint8 PQ codes of subset
+           tokens. Length of the list is equal to the batch size. The shape of each
+           element is `(subset_size, M)`, where `M` is the number of subvectors in PQ.
+
+        Since faiss and PyTorch manage CUDA memory separately, they must be explicitly
+        released to reduce the memory footprint.
+        """
+        del self.subset_tokens
+        del self.subset_index.subset_codes
+        torch.cuda.empty_cache()
+
     @torch.jit.export
     def forward_encoder(
         self, net_input: Dict[str, Tensor]
