@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
+import concurrent.futures
+import copy
 import logging
 import os.path
 import sys
+import time
 from argparse import ArgumentParser, RawTextHelpFormatter
-from time import time
-from typing import Iterator, List
+from collections import deque
+from typing import Iterator, List, Optional
 
 import numpy as np
 import torch
@@ -13,6 +16,7 @@ from tqdm import tqdm
 
 from knn_seq.data import Datastore, TokenStorage
 from knn_seq.models import build_hf_model
+from knn_seq.models.hf_model import HFModelBase
 
 logging.basicConfig(
     format="| %(asctime)s | %(levelname)s | %(message)s",
@@ -25,8 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 def batch_sampler(
-    val: TokenStorage, max_tokens: int = 512
+    val: TokenStorage,
+    max_tokens: Optional[int] = None,
+    max_sentences: Optional[int] = None,
 ) -> Iterator[List[np.ndarray]]:
+    assert max_tokens is not None or max_sentences is not None
     batch = []
     num_tokens, max_len = 0, 0
     for i, seq_len in enumerate(val.lengths):
@@ -34,7 +41,9 @@ def batch_sampler(
         if max_len == 0:
             max_len = seq_len
         num_tokens += max_len
-        if max_tokens is not None and num_tokens + max_len > max_tokens:
+        if (max_sentences is not None and len(batch) >= max_sentences) or (
+            max_tokens is not None and num_tokens + max_len > max_tokens
+        ):
             yield batch
             batch = []
             num_tokens, max_len = 0, 0
@@ -48,11 +57,13 @@ def parse_args():
     parser = ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument("--outdir", "-o", metavar="DIR", default="index",
                         help="output directory")
-    parser.add_argument("--max-tokens", metavar="N", type=int, default=12000,
-                        help="max tokens per batch")
-    parser.add_argument("--save-freq", metavar="N", type=int, default=512,
-                        help="save frequency to reduce random write access;\n"
-                             "if set a lower value, the less memory will be used but saving will be slower.")
+    bsz_group = parser.add_mutually_exclusive_group()
+    bsz_group.add_argument("--max-tokens", metavar="N", type=int, default=None,
+                           help="max tokens per batch")
+    bsz_group.add_argument("--max-sentences", "--batch-size", metavar="N", type=int, default=None,
+                           help="max sentences per batch")
+    parser.add_argument("--num-gpus", metavar="N", type=int, default=1,
+                        help="number of GPUs to compute keys")
     parser.add_argument("--cpu", action="store_true",
                         help="only use CPU")
     parser.add_argument("--fp16", action="store_true",
@@ -73,14 +84,32 @@ def parse_args():
 def main(args):
     logger.info(args)
 
-    use_gpu = torch.cuda.is_available() and not args.cpu
-    val = TokenStorage.load(args.outdir)
+    max_tokens: Optional[int] = args.max_tokens
+    max_sentences: Optional[int] = args.max_sentences
+    if max_tokens is None and max_sentences is None:
+        max_sentences = 128
+
+    use_cuda = torch.cuda.is_available() and not args.cpu
     model = build_hf_model(args.model_name, args.feature)
-    if use_gpu:
-        model = model.cuda()
+    if use_cuda:
+        model_replicas = [copy.deepcopy(model).cuda(i) for i in range(args.num_gpus)]
         if args.fp16:
-            model = model.half()
-    model.tokenizer.pretokenized = True
+            model_replicas = [m.half() for m in model_replicas]
+    else:
+        model_replicas = [model]
+    num_replicas = len(model_replicas)
+
+    for m in model_replicas:
+        m.tokenizer.pretokenized = True
+
+    val = TokenStorage.load(args.outdir)
+
+    def batch_iterator():
+        for indices in tqdm(
+            list(batch_sampler(val, max_tokens, max_sentences)),
+            desc="Datastore creation",
+        ):
+            yield [val[idx].tolist() for idx in indices]
 
     datastore_path = os.path.join(args.outdir, "datastore.{}.bin".format(args.feature))
     with Datastore.open(
@@ -91,27 +120,47 @@ def main(args):
         readonly=False,
         compress=args.compress_datastore,
     ) as ds:
-        logger.info("Creating the datastore to {}".format(datastore_path))
-        start_time = time()
-        feature_vectors = []
-        for i, seq_ids in enumerate(
-            tqdm(
-                list(batch_sampler(val, max_tokens=args.max_tokens)),
-                desc="Datastore creation",
-            ),
-        ):
-            batch = [val[idx].tolist() for idx in seq_ids]
-            net_outputs = model(model.tokenizer.collate(batch))
-            feature_vectors.append(net_outputs.cpu().numpy())
 
-            if (i + 1) % args.save_freq == 0:
-                ds.add(np.concatenate(feature_vectors))
-                feature_vectors = []
+        def _add_examples(
+            rank: int, model: HFModelBase, batch: List[List[int]], begin: int, end: int
+        ) -> int:
+            net_inputs = model.tokenizer.collate(batch)
+            net_outputs = model(net_inputs)
+            ds.write_range(net_outputs.cpu().numpy(), begin, end)
+            return rank
 
-        if len(feature_vectors) > 0:
-            ds.add(np.concatenate(feature_vectors))
+        logger.info(f"Creating the datastore to {datastore_path}")
+        logger.info(f"Datastore size: {len(val):,}")
+        start_time = time.perf_counter()
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=num_replicas
+        ) as executor:
+            wp = 0
+            workers = set()
+            empties = deque(range(num_replicas))
+            for batch in batch_iterator():
+                length = len(batch)
+                rank = empties.popleft()
+                workers.add(
+                    executor.submit(
+                        _add_examples,
+                        rank,
+                        model_replicas[rank],
+                        batch,
+                        wp,
+                        wp + length,
+                    )
+                )
+                wp += length
 
-        end_time = time()
+                if len(workers) >= num_replicas:
+                    # Wait until one worker is finished.
+                    finished, workers = concurrent.futures.wait(
+                        workers, return_when=concurrent.futures.FIRST_COMPLETED
+                    )
+                    empties = deque(res.result() for res in finished)
+
+    end_time = time.perf_counter()
 
     logger.info(
         "Processed {:,} datapoints in {:.1f} seconds".format(
