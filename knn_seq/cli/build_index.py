@@ -64,6 +64,8 @@ def parse_args():
                         help="Save an index every N times.")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Displays the verbose messages.")
+    parser.add_argument("--save-freq", type=int, metavar="N", default=-1,
+                        help="Save an index every N times.")
     # fmt: on
     return parser.parse_args()
 

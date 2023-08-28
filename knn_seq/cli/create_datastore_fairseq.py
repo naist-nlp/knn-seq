@@ -110,38 +110,32 @@ def main(args: Namespace):
 
     def _add_examples(
         rank: int,
-        lock: Lock,
         model: FairseqKNNModel,
         batch: Dict[str, Any],
         begin: int,
         end: int,
-    ):
-        with lock:
-            if use_cuda:
-                batch = fairseq_utils.move_to_cuda(batch, f"cuda:{rank}")
-            net_input = batch["net_input"]
-            orig_order = batch["orig_order"]
-            src_tokens = net_input["src_tokens"].index_select(0, orig_order)
-            src_lengths = net_input["src_lengths"].index_select(0, orig_order)
-            prev_output_tokens = net_input["prev_output_tokens"].index_select(
-                0, orig_order
-            )
-            net_outputs = model(
-                src_tokens=src_tokens,
-                src_lengths=src_lengths,
-                prev_output_tokens=prev_output_tokens,
-                output_encoder_features=args.store_src_sent,
-            )
-            if not args.store_src_sent:
-                store_mask = prev_output_tokens[:, args.ignore_prefix_size :].ne(
-                    tgt_dict.pad()
-                )
-                net_outputs = [
-                    decoder_out[:, args.ignore_prefix_size :][store_mask]
-                    for decoder_out in net_outputs
-                ]
-            for keys, ds in zip(net_outputs, datastores):
-                ds.write_range(keys.cpu().numpy(), begin, end)
+    ) -> int:
+        if use_cuda:
+            batch = fairseq_utils.move_to_cuda(batch, f"cuda:{rank}")
+        net_input = batch["net_input"]
+        orig_order = batch["orig_order"]
+        src_tokens = net_input["src_tokens"].index_select(0, orig_order)
+        src_lengths = net_input["src_lengths"].index_select(0, orig_order)
+        prev_output_tokens = net_input["prev_output_tokens"].index_select(0, orig_order)
+        net_outputs = model(
+            src_tokens=src_tokens,
+            src_lengths=src_lengths,
+            prev_output_tokens=prev_output_tokens,
+            output_encoder_features=args.store_src_sent,
+        )
+        if not args.store_src_sent:
+            net_outputs = [
+                decoder_out[prev_output_tokens.ne(tgt_dict.pad())]
+                for decoder_out in net_outputs
+            ]
+        for keys, ds in zip(net_outputs, datastores):
+            ds.write_range(keys.cpu().numpy(), begin, end)
+        return rank
 
     logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
     logger.info(f"Datastore size: {size:,}")
@@ -151,7 +145,6 @@ def main(args: Namespace):
         #   assign a worker to an empty device.
         workers = set()
         empties = deque(range(num_replicas))
-        locks = [Lock() for _ in range(num_replicas)]
         wp = 0
         start_time = time.perf_counter()
         for batch in tqdm(epoch_iter):
@@ -171,7 +164,6 @@ def main(args: Namespace):
                 executor.submit(
                     _add_examples,
                     rank,
-                    locks[rank],
                     model_replicas[rank],
                     batch,
                     wp,
@@ -180,21 +172,12 @@ def main(args: Namespace):
             )
             wp += length
 
-            if len(empties) <= 0:
+            if len(workers) >= num_replicas:
                 # Wait until one worker is finished.
-                _, workers = concurrent.futures.wait(
+                finished, workers = concurrent.futures.wait(
                     workers, return_when=concurrent.futures.FIRST_COMPLETED
                 )
-                while len(empties) <= 0:
-                    # TODO(deguchi): Investigate why this sleep is needed and solve it.
-                    # Sometimes the number of unlocked will be 0, although a worker
-                    # is finished.
-                    # I think there may be a slight difference in the timing of when
-                    # wait sends the worker's termination and when the lock is released.
-                    empties = deque(
-                        i for i, lock in enumerate(locks) if not lock.locked()
-                    )
-                    time.sleep(0.1)
+                empties = deque(res.result() for res in finished)
 
     end_time = time.perf_counter()
 

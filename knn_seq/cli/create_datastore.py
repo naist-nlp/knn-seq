@@ -8,8 +8,7 @@ import sys
 import time
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import deque
-from threading import Lock
-from typing import Iterator, List
+from typing import Iterator, List, Optional
 
 import numpy as np
 import torch
@@ -30,8 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 def batch_sampler(
-    val: TokenStorage, max_tokens: int = 512
+    val: TokenStorage,
+    max_tokens: Optional[int] = None,
+    max_sentences: Optional[int] = None,
 ) -> Iterator[List[np.ndarray]]:
+    assert max_tokens is not None or max_sentences is not None
     batch = []
     num_tokens, max_len = 0, 0
     for i, seq_len in enumerate(val.lengths):
@@ -39,7 +41,9 @@ def batch_sampler(
         if max_len == 0:
             max_len = seq_len
         num_tokens += max_len
-        if max_tokens is not None and num_tokens + max_len > max_tokens:
+        if (max_sentences is not None and len(batch) >= max_sentences) or (
+            max_tokens is not None and num_tokens + max_len > max_tokens
+        ):
             yield batch
             batch = []
             num_tokens, max_len = 0, 0
@@ -53,9 +57,12 @@ def parse_args():
     parser = ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument("--outdir", "-o", metavar="DIR", default="index",
                         help="output directory")
-    parser.add_argument("--max-tokens", metavar="N", type=int, default=12000,
-                        help="max tokens per batch")
-    parser.add_argument("--num-gpus", type=int, default=1,
+    bsz_group = parser.add_mutually_exclusive_group()
+    bsz_group.add_argument("--max-tokens", metavar="N", type=int, default=None,
+                           help="max tokens per batch")
+    bsz_group.add_argument("--max-sentences", "--batch-size", metavar="N", type=int, default=None,
+                           help="max sentences per batch")
+    parser.add_argument("--num-gpus", metavar="N", type=int, default=1,
                         help="number of GPUs to compute keys")
     parser.add_argument("--cpu", action="store_true",
                         help="only use CPU")
@@ -77,6 +84,11 @@ def parse_args():
 def main(args):
     logger.info(args)
 
+    max_tokens: Optional[int] = args.max_tokens
+    max_sentences: Optional[int] = args.max_sentences
+    if max_tokens is None and max_sentences is None:
+        max_sentences = 128
+
     use_cuda = torch.cuda.is_available() and not args.cpu
     model = build_hf_model(args.model_name, args.feature)
     if use_cuda:
@@ -92,9 +104,9 @@ def main(args):
 
     val = TokenStorage.load(args.outdir)
 
-    def get_batch():
+    def batch_iterator():
         for indices in tqdm(
-            list(batch_sampler(val, max_tokens=args.max_tokens)),
+            list(batch_sampler(val, max_tokens, max_sentences)),
             desc="Datastore creation",
         ):
             yield [val[idx].tolist() for idx in indices]
@@ -110,30 +122,29 @@ def main(args):
     ) as ds:
 
         def _add_examples(
-            lock: Lock, model: HFModelBase, batch: List[List[int]], begin: int, end: int
-        ):
-            with lock:
-                net_inputs = model.tokenizer.collate(batch)
-                net_outputs = model(net_inputs)
-                ds.write_range(net_outputs.cpu().numpy(), begin, end)
+            rank: int, model: HFModelBase, batch: List[List[int]], begin: int, end: int
+        ) -> int:
+            net_inputs = model.tokenizer.collate(batch)
+            net_outputs = model(net_inputs)
+            ds.write_range(net_outputs.cpu().numpy(), begin, end)
+            return rank
 
         logger.info(f"Creating the datastore to {datastore_path}")
         logger.info(f"Datastore size: {len(val):,}")
+        start_time = time.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=num_replicas
         ) as executor:
-            locks = [Lock() for _ in range(num_replicas)]
             wp = 0
             workers = set()
             empties = deque(range(num_replicas))
-            start_time = time.perf_counter()
-            for batch in get_batch():
+            for batch in batch_iterator():
                 length = len(batch)
                 rank = empties.popleft()
                 workers.add(
                     executor.submit(
                         _add_examples,
-                        locks[rank],
+                        rank,
                         model_replicas[rank],
                         batch,
                         wp,
@@ -142,17 +153,12 @@ def main(args):
                 )
                 wp += length
 
-                if len(empties) <= 0:
+                if len(workers) >= num_replicas:
                     # Wait until one worker is finished.
-                    workers = concurrent.futures.wait(
-                        workers, return_when="FIRST_COMPLETED"
-                    )[1]
-                    while len(empties) <= 0:
-                        # Slight delay in unlocking may occur
-                        empties = deque(
-                            i for i, lock in enumerate(locks) if not lock.locked()
-                        )
-                        time.sleep(0.1)
+                    finished, workers = concurrent.futures.wait(
+                        workers, return_when=concurrent.futures.FIRST_COMPLETED
+                    )
+                    empties = deque(res.result() for res in finished)
 
     end_time = time.perf_counter()
 
