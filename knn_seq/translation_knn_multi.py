@@ -240,7 +240,7 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
         subset_knn = self.args.src_knn_model is not None or self.args.src_key == "enc"
 
         knn_cuda = torch.cuda.is_available() and not self.args.knn_cpu
-        fp16 = next(models[0].parameters()).device
+        fp16 = next(models[0].parameters()).dtype is torch.float16
         knn_index_paths = fairseq_utils.split_paths(self.args.knn_index_path)
         knn_value_dir = os.path.dirname(self.args.knn_value_path)
         if not self.args.knn_ensemble:

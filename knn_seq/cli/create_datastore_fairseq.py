@@ -130,7 +130,9 @@ def main(args: Namespace):
         )
         if not args.store_src_sent:
             net_outputs = [
-                decoder_out[prev_output_tokens.ne(tgt_dict.pad())]
+                decoder_out[:, args.ignore_prefix_size :][
+                    prev_output_tokens[:, args.ignore_prefix_size :].ne(tgt_dict.pad())
+                ]
                 for decoder_out in net_outputs
             ]
         for keys, ds in zip(net_outputs, datastores):
