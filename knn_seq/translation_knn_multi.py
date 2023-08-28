@@ -240,6 +240,7 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
         subset_knn = self.args.src_knn_model is not None or self.args.src_key == "enc"
 
         knn_cuda = torch.cuda.is_available() and not self.args.knn_cpu
+        fp16 = next(models[0].parameters()).device
         knn_index_paths = fairseq_utils.split_paths(self.args.knn_index_path)
         knn_value_dir = os.path.dirname(self.args.knn_value_path)
         if not self.args.knn_ensemble:
@@ -285,7 +286,7 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
             src_knn_model = build_hf_model(self.args.src_knn_model, self.args.src_key)
             if knn_cuda:
                 src_knn_model = src_knn_model.cuda()
-                if args.fp16:
+                if fp16:
                     src_knn_model = src_knn_model.half()
             logger.info(f"Loaded source kNN model: {src_knn_model}")
         src_value_dir = os.path.dirname(self.args.src_value_path)
@@ -314,7 +315,7 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
             knn_weight=self.args.knn_weight,
             src_topk=self.args.src_topk,
             use_gpu=knn_cuda,
-            use_fp16=args.fp16,
+            use_fp16=fp16,
         )
         return super().build_generator(
             models,
