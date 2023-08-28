@@ -62,6 +62,8 @@ def parse_args():
                         help="the dimension size of vector transform")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Displays the verbose messages.")
+    parser.add_argument("--save-freq", type=int, metavar="N", default=-1,
+                        help="Save an index every N times.")
     # fmt: on
     return parser.parse_args()
 
@@ -133,12 +135,13 @@ def main(args: Namespace):
             index.add(ds[start_idx:end_idx])
             logger.info(f"Index size: {len(index):,}")
 
-            save_start_time = time.perf_counter()
-            index.save(index_path)
-            save_end_time = time.perf_counter()
-            logger.info(
-                "Saved index in {:.1f} seconds.".format(save_end_time - save_start_time)
-            )
+            if args.save_freq > 0 and (i + 1) % args.save_freq == 0:
+                save_start_time = time.perf_counter()
+                index.save(index_path)
+                save_end_time = time.perf_counter()
+                logger.info(
+                    "Saved index in {:.1f} seconds.".format(save_end_time - save_start_time)
+                )
 
     index.save(index_path)
     end_time = time.perf_counter()
