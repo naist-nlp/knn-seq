@@ -60,8 +60,6 @@ def parse_args():
                         help="Use PCA")
     parser.add_argument("--transform-dim", metavar="N", type=int, default=-1,
                         help="the dimension size of vector transform")
-    parser.add_argument("--save-freq", metavar="N", type=int, default=-1,
-                        help="Save an index every N times.")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Displays the verbose messages.")
     parser.add_argument("--save-freq", type=int, metavar="N", default=-1,
