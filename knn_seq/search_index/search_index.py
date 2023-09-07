@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from typing import Any, Optional, Tuple, Union
 
-import faiss
 import numpy as np
 import torch
 from numpy import ndarray
@@ -112,7 +111,7 @@ class SearchIndex(ABC):
         """
         vectors = self.convert_to_numpy(vectors)
         if self.metric == "cos":
-            faiss.normalize_L2(vectors)
+            vectors /= np.fmax(np.linalg.norm(vectors, axis=-1, keepdims=True), 1e-9)
         return vectors
 
     def to_gpu_train(self, *args, **kwargs):
