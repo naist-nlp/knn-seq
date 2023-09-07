@@ -9,7 +9,6 @@ from typing import Any, Callable, Iterable, Iterator, List, TypeVar
 import fairseq
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
@@ -120,30 +119,6 @@ def to_device(item: Any, use_gpu: bool = True) -> Any:
         return item_type([to_device(x, use_gpu=use_gpu) for x in item])
     else:
         return item
-
-
-def softmax(scores: Tensor):
-    """Computes probability distributions.
-
-    Args:
-        scores (FloatTensor): scores tensor.
-
-    Returns:
-        Tensor: probability distributions.
-    """
-    return F.softmax(scores, dim=-1, dtype=torch.float32)
-
-
-def log_softmax(scores: Tensor):
-    """Computes log probability distributions.
-
-    Args:
-        scores (FloatTensor): scores tensor.
-
-    Returns:
-        Tensor: log probability distributions.
-    """
-    return F.log_softmax(scores, dim=-1, dtype=torch.float32)
 
 
 def pad(tensors: List[Tensor], padding_idx: int) -> Tensor:

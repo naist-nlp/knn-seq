@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
+import torch
+import torch.nn.functional as F
 from torch import Tensor
 
-from knn_seq import utils
 from knn_seq.data.token_storage import TokenStorage
 from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
 from knn_seq.search_index.search_index import SearchIndex
@@ -57,6 +58,8 @@ class FairseqKNNModel(FairseqKNNModelBase):
         )
         if self.knn_threshold is not None:
             scores[scores < self.knn_threshold] = float("-inf")
-        probs = utils.softmax(scores / self.knn_temperature).type_as(querys)
+        probs = F.softmax(
+            scores / self.knn_temperature, dim=-1, dtype=torch.float32
+        ).type_as(querys)
         indices = indices.to(querys.device)
         return self.KNNOutput(scores, probs, indices)

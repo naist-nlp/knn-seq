@@ -373,56 +373,6 @@ class TestToDevice:
         assert np.array_equal(result, item)
 
 
-class TestSoftmax:
-    @pytest.mark.parametrize(
-        "tensor",
-        [
-            torch.eye(5),
-            torch.arange(5),
-            torch.rand((2, 3)),
-            torch.rand((3, 2), dtype=torch.float16),
-            torch.rand((3, 4, 2), dtype=torch.float64),
-        ],
-    )
-    def test(self, tensor):
-        result = utils.softmax(tensor)
-        array = tensor.cpu().to(torch.float32).numpy()
-
-        max = np.max(array, axis=-1, keepdims=True)
-        e_x = np.exp(array - max)
-        sum = np.sum(e_x, axis=-1, keepdims=True)
-        expected_result = torch.tensor(e_x / sum, dtype=torch.float32)
-
-        assert isinstance(result, torch.Tensor)
-        torch.testing.assert_close(result, expected_result)
-        assert result.dtype == torch.float32
-
-
-class TestLogSoftmax:
-    @pytest.mark.parametrize(
-        "tensor",
-        [
-            torch.eye(5),
-            torch.arange(5),
-            torch.rand((2, 3)),
-            torch.rand((3, 2), dtype=torch.float16),
-            torch.rand((3, 4, 2), dtype=torch.float64),
-        ],
-    )
-    def test(self, tensor):
-        result = utils.log_softmax(tensor)
-        array = tensor.cpu().to(torch.float32).numpy()
-
-        max = np.max(array, axis=-1, keepdims=True)
-        e_x = np.exp(array - max)
-        sum = np.sum(e_x, axis=-1, keepdims=True)
-        expected_result = torch.tensor(np.log(e_x / sum), dtype=torch.float32)
-
-        assert isinstance(result, torch.Tensor)
-        torch.testing.assert_close(result, expected_result)
-        assert result.dtype == torch.float32
-
-
 class TestPad:
     def test_type_errors(self):
         tensor_list = [np.arange(5), np.arange(2)]
