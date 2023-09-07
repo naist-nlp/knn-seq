@@ -9,7 +9,7 @@ from data.fixtures import (
     testdata_tgt_dict,
 )
 from knn_seq.data.token_storage import TokenStorage
-from knn_seq.models.fairseq_knn_model import FairseqKNNModel
+from knn_seq.models.fairseq_knn_model_vanilla import FairseqKNNModel
 from knn_seq.search_index.faiss_index import FaissIndex
 from knn_seq.search_index.search_index import SearchIndexConfig
 from knn_seq.tasks.dataset_wrapper import LanguagePairDatasetWithOriginalOrder
