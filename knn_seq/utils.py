@@ -63,14 +63,6 @@ def read_lines(
 T = TypeVar("T")
 
 
-def to_ndarray(x):
-    if isinstance(x, np.ndarray):
-        return x
-    if torch.is_tensor(x):
-        return x.cpu().numpy()
-    return np.array(x)
-
-
 def to_device(item: Any, use_gpu: bool = True) -> Any:
     """Transfers tensors in arbitrary data structres to a specific device.
 
