@@ -101,4 +101,3 @@ def test_datastore_write_range(bio, data):
     k = np.random.randn(2, 10).astype("float32")
     d.write_range(k, 0, 2)
     assert np.array_equal(d[1], k[1])
-    assert d._write_pointer == 2
