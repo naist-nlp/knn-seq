@@ -2,7 +2,7 @@ import fileinput
 import logging
 import time
 from collections import UserDict, UserList
-from typing import Any, Iterable, Iterator, List, TypeVar
+from typing import Any, Iterator, List
 
 import fairseq
 import torch
@@ -10,29 +10,6 @@ from torch import Tensor
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-
-
-def buffer_lines(lines: Iterable, buffer_size: int = 10000) -> Iterator[List[str]]:
-    """Yields buffered lines.
-
-    Args:
-        lines (Iterable): input lines.
-        buffer_size (int): buffer size.
-
-    Yields:
-        List[str]: buffered lines.
-    """
-    if buffer_size <= 0:
-        raise ValueError("buffer_size must be at least 1")
-
-    buffer = []
-    for line in lines:
-        buffer.append(line)
-        if len(buffer) >= buffer_size:
-            yield buffer
-            buffer = []
-    if len(buffer) > 0:
-        yield buffer
 
 
 def read_lines(
@@ -47,6 +24,8 @@ def read_lines(
     Yields:
         List[str]: buffered input lines.
     """
+    if buffer_size <= 0:
+        raise ValueError("buffer_size must be at least 1")
 
     def progress_bar(buf):
         if progress:
@@ -54,11 +33,14 @@ def read_lines(
         return buf
 
     with fileinput.input([input], openhook=fileinput.hook_encoded("utf-8")) as f:
-        for lines in buffer_lines(progress_bar(f), buffer_size=buffer_size):
-            yield lines
-
-
-T = TypeVar("T")
+        buffer = []
+        for line in progress_bar(f):
+            buffer.append(line)
+            if len(buffer) >= buffer_size:
+                yield buffer
+                buffer = []
+        if len(buffer) > 0:
+            yield buffer
 
 
 def to_device(item: Any, use_gpu: bool = True) -> Any:
