@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import torch
 from torch import ByteTensor, FloatTensor, LongTensor, Tensor

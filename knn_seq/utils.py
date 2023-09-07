@@ -2,11 +2,9 @@ import fileinput
 import logging
 import time
 from collections import UserDict, UserList
-from concurrent import futures
-from typing import Any, Callable, Iterable, Iterator, List, TypeVar
+from typing import Any, Iterable, Iterator, List, TypeVar
 
 import fairseq
-import numpy as np
 import torch
 from torch import Tensor
 from tqdm import tqdm

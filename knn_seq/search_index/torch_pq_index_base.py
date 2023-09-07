@@ -5,7 +5,7 @@ import faiss
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import BoolTensor, ByteTensor, FloatTensor, LongTensor, Tensor
+from torch import ByteTensor, FloatTensor, LongTensor, Tensor
 
 from knn_seq.search_index.faiss_index import FaissIndex
 from knn_seq.search_index.search_index import SearchIndex
