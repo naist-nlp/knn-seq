@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 from knn_seq.data.datastore import Datastore
 from knn_seq.models import FairseqKNNModel
-from knn_seq.translation_knn import TranslationKnnTask
+from knn_seq.tasks import TranslationKnnTask
 
 logging.basicConfig(
     format="| %(asctime)s | %(levelname)s | %(message)s",
