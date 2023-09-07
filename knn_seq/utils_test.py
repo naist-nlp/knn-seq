@@ -10,45 +10,6 @@ import torch
 from knn_seq import utils
 
 
-class TestBufferLines:
-    @pytest.mark.parametrize(("lines", "buffer_size"), [(4, 4), ([4], "4")])
-    def test_type_errors(self, lines, buffer_size):
-        with pytest.raises(TypeError):
-            for result_lines in utils.buffer_lines(
-                lines=lines, buffer_size=buffer_size
-            ):
-                assert result_lines == None
-
-    def test_zero_lines(self):
-        with pytest.raises(StopIteration):
-            result_lines = utils.buffer_lines(lines=[])
-            next(result_lines)
-
-    @pytest.mark.parametrize("buffer_size", [-1, 0])
-    def test_zero_buffer(self, buffer_size):
-        with pytest.raises(ValueError):
-            lines = [1] * 20
-            result_lines = utils.buffer_lines(lines=lines, buffer_size=buffer_size)
-            next(result_lines)
-
-    @pytest.mark.parametrize(
-        ("num_lines", "buffer_size"), [(1, 4), (4, 4), (16, 4), (17, 4), (4, 1)]
-    )
-    def test(self, num_lines, buffer_size):
-        expected_repetitions = math.ceil(num_lines / buffer_size)
-
-        lines = [1] * num_lines
-        num_repetitions = 0
-        for result_lines in utils.buffer_lines(lines=lines, buffer_size=buffer_size):
-            num_repetitions += 1
-            if num_repetitions == expected_repetitions:
-                assert len(result_lines) <= buffer_size
-            else:
-                assert len(result_lines) == buffer_size
-
-        assert num_repetitions == expected_repetitions
-
-
 class TestReadLines:
     @pytest.fixture
     def tmp_file(self, tmp_path) -> str:
@@ -65,6 +26,12 @@ class TestReadLines:
         result_lines = utils.read_lines(input=str(tmp_file), buffer_size=1)
 
         with pytest.raises(StopIteration):
+            next(result_lines)
+
+    @pytest.mark.parametrize("buffer_size", [-1, 0])
+    def test_zero_buffer(self, tmp_file, buffer_size):
+        with pytest.raises(ValueError):
+            result_lines = utils.read_lines(input=str(tmp_file), buffer_size=buffer_size)
             next(result_lines)
 
     def test_can_stop(self, tmp_file):
@@ -118,129 +85,6 @@ class TestReadLines:
             assert progress_split[-1].startswith("{}it".format(num_lines))
         else:
             assert capsys.readouterr().err == ""
-
-
-def caps(strs: [str]) -> [str]:
-    return [s.upper() for s in strs]
-
-
-def double_it(x: float) -> float:
-    return x * 2
-
-
-def scale(x: float, y: float) -> float:
-    return x * y
-
-
-class TestParallelApply:
-    def test_no_workers(self):
-        def double(x: float) -> float:
-            return x * 2
-
-        with pytest.raises(ValueError):
-            result = utils.parallel_apply(double, [0.0, 1.0, 2.0, 3.0], 0)
-            next(result)
-
-    def test_simple(self):
-        result = utils.parallel_apply(double_it, [0.0, 1.0, 2.0, 3.0])
-        assert next(result) == 0
-        assert next(result) == 2.0
-        assert next(result) == 4.0
-        assert next(result) == 6.0
-        with pytest.raises(StopIteration):
-            next(result)
-
-    def test_simple_with_two_workers(self):
-        result = utils.parallel_apply(double_it, [0.0, 1.0, 2.0, 3.0], 2)
-        assert next(result) == 0
-        assert next(result) == 2.0
-        assert next(result) == 4.0
-        assert next(result) == 6.0
-        with pytest.raises(StopIteration):
-            next(result)
-
-    def test_with_no_input(self):
-        def simple() -> int:
-            return 1
-
-        with pytest.raises(TypeError):
-            result = utils.parallel_apply(simple, [0.0, 1.0, 2.0, 3.0], 1)
-            next(result)
-
-    @pytest.fixture
-    def tmp_file(self, tmp_path) -> str:
-        lines = ["a", "b", "c", "d", "e"]
-        content = "\n".join(lines)
-        path = tmp_path / "test.txt"
-        path.write_text(content)
-        return str(path)
-
-    def test_with_read_lines(self, tmp_file):
-        result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 1)
-        assert next(result) == ["A\n", "B\n", "C\n"]
-        assert next(result) == ["D\n", "E"]
-        with pytest.raises(StopIteration):
-            next(result)
-
-    def test_with_two_workers(self, tmp_file):
-        result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 2)
-
-        assert next(result) == ["A\n", "B\n", "C\n"]
-        assert next(result) == ["D\n", "E"]
-        with pytest.raises(StopIteration):
-            next(result)
-
-    def test_with_two_workers2(self, tmp_file):
-        result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 1), 2)
-
-        assert next(result) == ["A\n"]
-        assert next(result) == ["B\n"]
-        assert next(result) == ["C\n"]
-        assert next(result) == ["D\n"]
-        assert next(result) == ["E"]
-        with pytest.raises(StopIteration):
-            next(result)
-
-    def test_with_too_many_workers(self, tmp_file):
-        result = utils.parallel_apply(caps, utils.read_lines(tmp_file, 3), 12)
-
-        assert next(result) == ["A\n", "B\n", "C\n"]
-        assert next(result) == ["D\n", "E"]
-        with pytest.raises(StopIteration):
-            next(result)
-
-
-class TestToNDArray:
-    def test_ndarray(self):
-        array = np.arange(5)
-        result = utils.to_ndarray(array)
-        assert isinstance(result, np.ndarray)
-        assert np.array_equal(result, np.arange(5))
-
-    def test_torch_cpu(self):
-        array = torch.arange(5).to("cpu")
-        result = utils.to_ndarray(array)
-        assert isinstance(result, np.ndarray)
-        assert np.array_equal(result, np.arange(5))
-
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
-    def test_torch_gpu(self):
-        array = torch.arange(5).to("cuda")
-        result = utils.to_ndarray(array)
-        assert isinstance(result, np.ndarray)
-        assert np.array_equal(result, np.arange(5))
-
-    def test_list(self):
-        array = [0, 1, 2, 3, 4]
-        result = utils.to_ndarray(array)
-        assert isinstance(result, np.ndarray)
-        assert np.array_equal(result, np.arange(5))
-
-    def test_empty(self):
-        array = torch.tensor([])
-        result = utils.to_ndarray(array)
-        assert isinstance(result, np.ndarray)
-        assert np.array_equal(result, np.array([]))
 
 
 class TestToDevice:
@@ -371,56 +215,6 @@ class TestToDevice:
     def test_nd_array(self, item, use_gpu):
         result = utils.to_device(item, use_gpu=use_gpu)
         assert np.array_equal(result, item)
-
-
-class TestSoftmax:
-    @pytest.mark.parametrize(
-        "tensor",
-        [
-            torch.eye(5),
-            torch.arange(5),
-            torch.rand((2, 3)),
-            torch.rand((3, 2), dtype=torch.float16),
-            torch.rand((3, 4, 2), dtype=torch.float64),
-        ],
-    )
-    def test(self, tensor):
-        result = utils.softmax(tensor)
-        array = tensor.cpu().to(torch.float32).numpy()
-
-        max = np.max(array, axis=-1, keepdims=True)
-        e_x = np.exp(array - max)
-        sum = np.sum(e_x, axis=-1, keepdims=True)
-        expected_result = torch.tensor(e_x / sum, dtype=torch.float32)
-
-        assert isinstance(result, torch.Tensor)
-        torch.testing.assert_close(result, expected_result)
-        assert result.dtype == torch.float32
-
-
-class TestLogSoftmax:
-    @pytest.mark.parametrize(
-        "tensor",
-        [
-            torch.eye(5),
-            torch.arange(5),
-            torch.rand((2, 3)),
-            torch.rand((3, 2), dtype=torch.float16),
-            torch.rand((3, 4, 2), dtype=torch.float64),
-        ],
-    )
-    def test(self, tensor):
-        result = utils.log_softmax(tensor)
-        array = tensor.cpu().to(torch.float32).numpy()
-
-        max = np.max(array, axis=-1, keepdims=True)
-        e_x = np.exp(array - max)
-        sum = np.sum(e_x, axis=-1, keepdims=True)
-        expected_result = torch.tensor(np.log(e_x / sum), dtype=torch.float32)
-
-        assert isinstance(result, torch.Tensor)
-        torch.testing.assert_close(result, expected_result)
-        assert result.dtype == torch.float32
 
 
 class TestPad:

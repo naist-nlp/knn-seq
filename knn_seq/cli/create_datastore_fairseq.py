@@ -9,7 +9,6 @@ import sys
 import time
 from argparse import Namespace
 from collections import deque
-from threading import Lock
 from typing import Any, Dict
 
 import fairseq.utils as fairseq_utils
