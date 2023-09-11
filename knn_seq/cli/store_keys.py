@@ -18,9 +18,9 @@ from fairseq import checkpoint_utils, options, tasks
 from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from tqdm import tqdm
 
-from knn_seq.data.datastore import Datastore
+from knn_seq.data import KeyStorage
 from knn_seq.models import FairseqKNNModel
-from knn_seq.translation_knn import TranslationKnnTask
+from knn_seq.tasks import TranslationKnnTask
 
 logging.basicConfig(
     format="| %(asctime)s | %(levelname)s | %(message)s",
@@ -83,23 +83,23 @@ def main(args: Namespace):
         num_workers=cfg.dataset.num_workers,
     ).next_epoch_itr(shuffle=False)
 
-    datastore_fnames = [
-        "datastore{}.{}.bin".format(
+    key_storage_fnames = [
+        "keys{}.{}.bin".format(
             "" if i == 0 else i,
             task.cfg.src_key if args.store_src_sent else task.cfg.knn_key,
         )
         for i in range(len(models))
     ]
-    datastore_paths = [os.path.join(task.cfg.data, fname) for fname in datastore_fnames]
+    key_storage_paths = [
+        os.path.join(task.cfg.data, fname) for fname in key_storage_fnames
+    ]
     size = len(dataset) if args.store_src_sent else sum(dataset.tgt_sizes)
     dtype = np.float16 if cfg.common.fp16 else np.float32
 
     dims = model.get_embed_dim()
-    datastores = [
-        Datastore._open(
-            path, size, dim, dtype, readonly=False, compress=args.compress_datastore
-        )
-        for path, dim in zip(datastore_paths, dims)
+    key_storages = [
+        KeyStorage._open(path, size, dim, dtype, readonly=False, compress=args.compress)
+        for path, dim in zip(key_storage_paths, dims)
     ]
 
     def _add_examples(
@@ -127,12 +127,12 @@ def main(args: Namespace):
                 decoder_out[prev_output_tokens.ne(tgt_dict.pad())]
                 for decoder_out in net_outputs
             ]
-        for keys, ds in zip(net_outputs, datastores):
-            ds.write_range(keys.cpu().numpy(), begin, end)
+        for keys, key_storage in zip(net_outputs, key_storages):
+            key_storage.write_range(keys.cpu().numpy(), begin, end)
         return rank
 
-    logger.info(f"Creating the datastore to {','.join(datastore_paths)}")
-    logger.info(f"Datastore size: {size:,}")
+    logger.info(f"Creating the key storages to {','.join(key_storage_paths)}")
+    logger.info(f"Storage size: {size:,}")
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_replicas) as executor:
         # - `workers` are used to keep track of the reference to futures.
         # - `empties` are used to keep track of actual worker instance and
@@ -173,8 +173,8 @@ def main(args: Namespace):
 
     end_time = time.perf_counter()
 
-    for ds in datastores:
-        ds.close()
+    for key_storage in key_storages:
+        key_storage.close()
 
     logger.info(
         "Processed {:,} datapoints in {:.1f} seconds".format(
@@ -195,7 +195,7 @@ def cli_main():
         help="stores the features of the source sentences",
     )
     parser.add_argument(
-        "--compress-datastore", action="store_true", help="compress the datastore"
+        "--compress", action="store_true", help="compress the key storage"
     )
     args = options.parse_args_and_arch(parser)
     main(args)
