@@ -49,8 +49,9 @@ Next, store all key vectors in a key storage.
 
     python knn_seq/cli/store_keys.py \
         --knn-key ffn_in \
+        --knn-value-path $INDEX_DIR/values.bin \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
-        --num-workers ${NUM_WORKERS} \
+        --num-workers ${NUM_WORKERS} --num-gpus 1 \
         --fp16 \
         --max-tokens 6000 \
         ${INDEX_DIR}
@@ -176,7 +177,7 @@ Next, store the sentence key vectors.
     python knn_seq/cli/store_keys.py \
         --src-key ${SRC_KEY} \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
-        --num-workers ${NUM_WORKERS} \
+        --num-workers ${NUM_WORKERS} --num-gpus 1 \
         --fp16 \
         --max-tokens 6000 \
         --store-src-sent \
