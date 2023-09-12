@@ -30,7 +30,7 @@ class HFModelBase(nn.Module):
         self.eval()
 
     def cuda(self, device=None):
-        self.tokenizer.use_gpu = True
+        self.tokenizer.device = f"cuda:{device}" or "cpu"
         return super().cuda(device=device)
 
     def forward(self, *args, **kwargs) -> Tensor:
