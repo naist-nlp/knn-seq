@@ -31,7 +31,9 @@ class TestReadLines:
     @pytest.mark.parametrize("buffer_size", [-1, 0])
     def test_zero_buffer(self, tmp_file, buffer_size):
         with pytest.raises(ValueError):
-            result_lines = utils.read_lines(input=str(tmp_file), buffer_size=buffer_size)
+            result_lines = utils.read_lines(
+                input=str(tmp_file), buffer_size=buffer_size
+            )
             next(result_lines)
 
     def test_can_stop(self, tmp_file):
@@ -92,25 +94,15 @@ class TestToDevice:
     def tmp_tensor(self):
         return torch.arange(5)
 
-    @pytest.mark.parametrize(
-        ("from_gpu", "to_gpu"),
-        [(True, True), (True, False), (False, True), (False, False)],
-    )
-    def test_tensor(self, tmp_tensor, from_gpu, to_gpu):
-        if not torch.cuda.is_available() and (to_gpu or from_gpu):
+    @pytest.mark.parametrize("src", ["cuda", "cpu"])
+    @pytest.mark.parametrize("dst", ["cuda", "cpu"])
+    def test_tensor(self, tmp_tensor, src, dst):
+        if not torch.cuda.is_available() and (src == "cuda" or dst == "cuda"):
             pytest.skip("No CUDA available")
 
-        if from_gpu:
-            tmp_tensor.cuda()
-        else:
-            tmp_tensor.cpu()
-
-        result = utils.to_device(tmp_tensor, use_gpu=to_gpu)
-
-        if to_gpu:
-            assert result.device.type == "cuda"
-        else:
-            assert result.device.type == "cpu"
+        tmp_tensor = tmp_tensor.to(device=src)
+        result = utils.to_device(tmp_tensor, device=dst)
+        assert result.device.type == dst
 
     @pytest.fixture
     def tmp_tensor_dict(self):
@@ -120,37 +112,22 @@ class TestToDevice:
 
         return temp_dict
 
-    @pytest.mark.parametrize(
-        ("from_gpu", "to_gpu", "is_user_dict"),
-        [
-            (True, True, False),
-            (True, False, False),
-            (False, True, False),
-            (False, False, False),
-            (True, True, True),
-            (True, False, True),
-            (False, True, True),
-            (False, False, True),
-        ],
-    )
-    def test_tensor_dict(self, tmp_tensor_dict, from_gpu, to_gpu, is_user_dict):
-        if not torch.cuda.is_available() and (to_gpu or from_gpu):
+    @pytest.mark.parametrize("src", ["cuda", "cpu"])
+    @pytest.mark.parametrize("dst", ["cuda", "cpu"])
+    @pytest.mark.parametrize("is_user_dict", [True, False])
+    def test_tensor_dict(self, tmp_tensor_dict, src, dst, is_user_dict):
+        if not torch.cuda.is_available() and (src == "cuda" or dst == "cuda"):
             pytest.skip("No CUDA available")
 
-        if from_gpu:
-            tmp_tensor_dict = {k: v.cuda() for k, v in tmp_tensor_dict.items()}
+        tmp_tensor_dict = {k: v.to(device=src) for k, v in tmp_tensor_dict.items()}
 
         if is_user_dict:
             tmp_tensor_dict = UserDict(tmp_tensor_dict)
 
-        result = utils.to_device(tmp_tensor_dict, use_gpu=to_gpu)
+        result = utils.to_device(tmp_tensor_dict, device=dst)
 
-        if to_gpu:
-            for k, v in result.items():
-                assert v.device.type == "cuda"
-        else:
-            for k, v in result.items():
-                assert v.device.type == "cpu"
+        for k, v in result.items():
+            assert v.device.type == dst
 
         if is_user_dict:
             assert isinstance(result, UserDict)
@@ -165,55 +142,38 @@ class TestToDevice:
 
         return temp_list
 
-    @pytest.mark.parametrize(
-        ("from_gpu", "to_gpu", "is_user_list"),
-        [
-            (True, True, False),
-            (True, False, False),
-            (False, True, False),
-            (False, False, False),
-            (True, True, True),
-            (True, False, True),
-            (False, True, True),
-            (False, False, True),
-        ],
-    )
-    def test_tensor_list(self, tmp_tensor_list, from_gpu, to_gpu, is_user_list):
-        if not torch.cuda.is_available() and (to_gpu or from_gpu):
+    @pytest.mark.parametrize("src", ["cuda", "cpu"])
+    @pytest.mark.parametrize("dst", ["cuda", "cpu"])
+    @pytest.mark.parametrize("is_user_list", [True, False])
+    def test_tensor_list(self, tmp_tensor_list, src, dst, is_user_list):
+        if not torch.cuda.is_available() and (src == "cuda" or dst == "cuda"):
             pytest.skip("No CUDA available")
 
-        if from_gpu:
-            tmp_tensor_list = [x.cuda() for x in tmp_tensor_list]
+        tmp_tensor_list = [x.to(device=src) for x in tmp_tensor_list]
 
         if is_user_list:
             tmp_tensor_list = UserList(tmp_tensor_list)
 
-        result = utils.to_device(tmp_tensor_list, use_gpu=to_gpu)
+        result = utils.to_device(tmp_tensor_list, device=dst)
 
-        if to_gpu:
-            for x in result:
-                assert x.device.type == "cuda"
-        else:
-            for x in result:
-                assert x.device.type == "cpu"
+        for x in result:
+            assert x.device.type == dst
 
         if is_user_list:
             assert isinstance(result, UserList)
         else:
             assert isinstance(result, list)
 
-    @pytest.mark.parametrize(
-        ("item", "use_gpu"), [("hello", True), ("hello", False), (1, True), (1, False)]
-    )
-    def test_other_input(self, item, use_gpu):
-        result = utils.to_device(item, use_gpu=use_gpu)
+    @pytest.mark.parametrize("item", ["hello", 1])
+    @pytest.mark.parametrize("device", ["cuda", "cpu"])
+    def test_other_input(self, item, device):
+        result = utils.to_device(item, device=device)
         assert result == item
 
-    @pytest.mark.parametrize(
-        ("item", "use_gpu"), [(np.arange(5), True), (np.arange(5), False)]
-    )
-    def test_nd_array(self, item, use_gpu):
-        result = utils.to_device(item, use_gpu=use_gpu)
+    @pytest.mark.parametrize("device", ["cuda", "cpu"])
+    def test_nd_array(self, device):
+        item = np.arange(5)
+        result = utils.to_device(item, device=device)
         assert np.array_equal(result, item)
 
 

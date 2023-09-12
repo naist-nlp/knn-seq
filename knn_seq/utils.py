@@ -43,25 +43,23 @@ def read_lines(
             yield buffer
 
 
-def to_device(item: Any, use_gpu: bool = True) -> Any:
+def to_device(item: Any, device: str = "cpu") -> Any:
     """Transfers tensors in arbitrary data structres to a specific device.
 
     Args:
         item (Any): arbitrary data structures.
-        use_gpu (bool): if True, tensors in `item` are transfered to GPUs, otherwise to CPUs.
+        device (str): tensors in `item` are transfered to specified devices.
 
     Returns:
         Any: the object that is trasfered to the device.
     """
     item_type = type(item)
     if torch.is_tensor(item):
-        if use_gpu:
-            return item.cuda()
-        return item.cpu()
+        return item.to(device=device)
     elif isinstance(item, (dict, UserDict)):
-        return item_type({k: to_device(v, use_gpu=use_gpu) for k, v in item.items()})
+        return item_type({k: to_device(v, device=device) for k, v in item.items()})
     elif isinstance(item, (list, UserList)):
-        return item_type([to_device(x, use_gpu=use_gpu) for x in item])
+        return item_type([to_device(x, device=device) for x in item])
     else:
         return item
 
