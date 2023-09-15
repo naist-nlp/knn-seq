@@ -14,7 +14,6 @@ torch = "2.0.0"
 fairseq = "0.12.1"
 faiss-gpu = "^1.7.2"
 sentence-transformers = "^2.2.2"
-sacrebleu = {extras = ["ja"], version = "^2.2.0"}
 h5py = "^3.7.0"
 
 [tool.poetry.scripts]
