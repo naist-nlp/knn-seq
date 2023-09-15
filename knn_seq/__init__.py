@@ -1,1 +1,3 @@
-from knn_seq.translation_knn import TranslationKnnTask
+from knn_seq.tasks.translation_knn import TranslationKnnTask
+
+__all__ = ["TranslationKnnTask"]

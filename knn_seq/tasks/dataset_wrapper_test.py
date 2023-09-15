@@ -10,7 +10,7 @@ from data.fixtures import (
     testdata_tgt_dict,
     testdata_tgt_sents,
 )
-from knn_seq.dataset_wrapper import (
+from knn_seq.tasks.dataset_wrapper import (
     LanguagePairDatasetWithOriginalOrder,
     LanguagePairDatasetWithRawSentence,
 )

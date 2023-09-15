@@ -10,7 +10,7 @@ from argparse import ArgumentParser, Namespace, RawTextHelpFormatter
 import torch
 from tqdm import tqdm
 
-from knn_seq.data import Datastore
+from knn_seq.data import KeyStorage
 from knn_seq.search_index import build_index, load_index
 from knn_seq.search_index.search_index import SearchIndex
 
@@ -26,12 +26,12 @@ logger = logging.getLogger("cli.build_index")
 
 def parse_args():
     parser = ArgumentParser(
-        description="Build the index from datastore for efficient search.",
+        description="Build the index from a key storage for efficient search.",
         formatter_class=RawTextHelpFormatter,
     )
     # fmt: off
-    parser.add_argument("--datastore-path", "-d", metavar="DIR", required=True,
-                        help="Path to a datastore file.")
+    parser.add_argument("--key-storage", "-k", metavar="FILE", required=True,
+                        help="Path to a key storage file.")
     parser.add_argument("--index-path-prefix", metavar="PREFIX", required=True,
                         help="Path prefix to an output index file."
                              "Output file name is added '.bin' to this argument.")
@@ -68,8 +68,10 @@ def parse_args():
     return parser.parse_args()
 
 
-def train_index(args: Namespace, ds: Datastore, use_gpu: bool = False) -> SearchIndex:
-    num_data, dim = ds.shape
+def train_index(
+    args: Namespace, keys: KeyStorage, use_gpu: bool = False
+) -> SearchIndex:
+    num_data, dim = keys.shape
     train_size = min(args.train_size, num_data)
     index: SearchIndex = build_index(
         args.backend,
@@ -100,7 +102,7 @@ def train_index(args: Namespace, ds: Datastore, use_gpu: bool = False) -> Search
         index.to_gpu_train()
     logger.info(f"Training from {train_size:,} datapoints")
     start_time = time.perf_counter()
-    index.train(ds[:train_size], verbose=args.verbose)
+    index.train(keys[:train_size], verbose=args.verbose)
     end_time = time.perf_counter()
     logger.info("Training done in {:.1f} seconds".format(end_time - start_time))
     index.save(trained_index_path)
@@ -110,7 +112,6 @@ def train_index(args: Namespace, ds: Datastore, use_gpu: bool = False) -> Search
 def main(args: Namespace):
     logger.info(args)
 
-    datastore_path = args.datastore_path
     index_path = args.index_path_prefix + ".bin"
 
     if os.path.exists(index_path):
@@ -118,12 +119,12 @@ def main(args: Namespace):
 
     use_gpu = torch.cuda.is_available() and not args.cpu
     chunk_size = args.chunk_size
-    with Datastore.open(datastore_path) as ds:
-        num_data = ds.shape[0]
-        index = train_index(args, ds, use_gpu=use_gpu)
+    with KeyStorage.open(args.key_storage) as keys:
+        num_data = keys.shape[0]
+        index = train_index(args, keys, use_gpu=use_gpu)
 
         if use_gpu:
-            index.to_gpu_add(fp16=ds.is_fp16)
+            index.to_gpu_add(fp16=keys.is_fp16)
 
         logger.info(f"Creating a kNN index in {index_path}")
         start_time = time.perf_counter()
@@ -132,7 +133,7 @@ def main(args: Namespace):
             end_idx = min(start_idx + chunk_size, num_data)
             nadd = end_idx - start_idx
             logger.info(f"Add vectors: {nadd:,} / {num_data:,}")
-            index.add(ds[start_idx:end_idx])
+            index.add(keys[start_idx:end_idx])
             logger.info(f"Index size: {len(index):,}")
 
             if args.save_freq > 0 and (i + 1) % args.save_freq == 0:
@@ -140,7 +141,9 @@ def main(args: Namespace):
                 index.save(index_path)
                 save_end_time = time.perf_counter()
                 logger.info(
-                    "Saved index in {:.1f} seconds.".format(save_end_time - save_start_time)
+                    "Saved index in {:.1f} seconds.".format(
+                        save_end_time - save_start_time
+                    )
                 )
 
     index.save(index_path)

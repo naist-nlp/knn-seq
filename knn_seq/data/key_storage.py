@@ -9,8 +9,8 @@ from numpy.typing import DTypeLike, NDArray
 logger = logging.getLogger(__name__)
 
 
-class Datastore:
-    """Datastore class."""
+class KeyStorage:
+    """Key storage class."""
 
     def __init__(self, hdf5: h5py.File, memory: h5py.Dataset) -> None:
         self.hdf5 = hdf5
@@ -46,7 +46,7 @@ class Datastore:
 
     @property
     def shape(self):
-        """Returns the shape of datastore memory."""
+        """Returns the shape of the storage."""
         return self._memory.shape
 
     @classmethod
@@ -58,11 +58,11 @@ class Datastore:
         dtype: DTypeLike = np.float32,
         readonly: bool = True,
         compress: bool = False,
-    ) -> "Datastore":
-        """Opens the datastore memory as mmap.
+    ) -> "KeyStorage":
+        """Opens the key storage.
 
         Args:
-            path (str): path of the datastore memory.
+            path (str): path of the key storage.
             size (int): the number of data.
             dim (Optional[int]): dimension size.
             dtype (DtypeLike): numpy dtype. (default: np.float32)
@@ -70,7 +70,7 @@ class Datastore:
             compress (bool): compress the memory.
 
         Returns:
-            Datastore: the datastore.
+            KeyStorage: this class.
         """
         f = h5py.File(path, mode="r" if readonly else "a")
         if readonly:
@@ -88,7 +88,7 @@ class Datastore:
         return self
 
     def close(self):
-        """Closes the datastore stream."""
+        """Closes the key storage stream."""
         self._memory.flush()
         self.hdf5.close()
 
@@ -103,18 +103,18 @@ class Datastore:
         readonly: bool = True,
         compress: bool = False,
     ):
-        """Opens the datastore memory as mmap.
+        """Opens the key storage.
 
         Args:
-            path (str): path of the datastore memory.
+            path (str): path of the key storage.
             size (int): the number of data.
             dim (Optional[int]): dimension size.
             dtype (DtypeLike): numpy dtype. (default: np.float32)
             readonly (bool): open as read only.
             compress (bool): compress the memory.
         """
-        logger.info("Opens the datastore from {}".format(path))
-        self = Datastore._open(
+        logger.info("Opens the key storage from {}".format(path))
+        self = KeyStorage._open(
             path, size=size, dim=dim, dtype=dtype, readonly=readonly, compress=compress
         )
         logger.info("Number of datapoints: {:,}".format(len(self)))
@@ -122,7 +122,7 @@ class Datastore:
         self.close()
 
     def add(self, keys: NDArray) -> None:
-        """Adds key vectors to the datastore.
+        """Adds key vectors to the storage.
 
         Vectors are written continuously.
 
@@ -135,7 +135,7 @@ class Datastore:
         self._write_pointer += length
 
     def write_range(self, keys: NDArray, begin: int, end: int) -> None:
-        """Writes key vectors to the datastore.
+        """Writes key vectors to the storage.
 
         Args:
             keys (NDArray): key vectors.

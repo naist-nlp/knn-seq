@@ -34,8 +34,8 @@ First, preprocess the dataset for building the datastore.
         --destdir ${DATABIN_DIR} \
         --workers ${NUM_WORKERS}
 
-    # Preprocess the corpus that is used as datastore.
-    python knn_seq/cli/binarize_fairseq.py \
+    # Store values of the datastore.
+    python knn_seq/cli/store_values.py \
         --source-lang de --target-lang en \
         --srcdict wmt19.de-en.ffn8192/dict.de.txt \
         --tgtdict wmt19.de-en.ffn8192/dict.en.txt \
@@ -43,26 +43,27 @@ First, preprocess the dataset for building the datastore.
         --workers ${NUM_WORKERS} \
         ${INDEX_DIR}
 
-Next, construct the datastore by computing all key vectors.
+Next, store all key vectors in a key storage.
 
 .. code:: bash
 
-    python knn_seq/cli/create_datastore_fairseq.py \
+    python knn_seq/cli/store_keys.py \
         --knn-key ffn_in \
+        --knn-value-path $INDEX_DIR/values.bin \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
-        --num-workers ${NUM_WORKERS} \
+        --num-workers ${NUM_WORKERS} --num-gpus 1 \
         --fp16 \
         --max-tokens 6000 \
         ${INDEX_DIR}
 
-Then, build the index for efficient kNN search.
+Then, build the key index for efficient kNN search.
 
 .. code:: bash
 
     INDEX_PATH_PREFIX=${INDEX_DIR}/index.ffn_in.l2.M64.nlist131072
 
     python knn_seq/cli/build_index.py \
-        --datastore-path ${INDEX_DIR}/datastore.ffn_in.bin \
+        --key-storage ${INDEX_DIR}/keys.ffn_in.bin \
         --index-path-prefix ${INDEX_PATH_PREFIX} \
         --train-size 5242880 \
         --chunk-size 10000000 \
@@ -70,8 +71,7 @@ Then, build the index for efficient kNN search.
         --hnsw-edges 32 \  # Coarse quantizer to search nearest top-`nprobe` centroids
         --ivf-lists 131072 \  # K-means clustering
         --pq-subvec 64 \  # Product quantization (PQ) to compress the all vectors to uint8 codes.
-        --use-opq \  # Rotaion vectors to minimize the PQ error.
-        --verbose
+        --use-opq  # Rotaion vectors to minimize the PQ error.
 
 - :code:`--hnsw-edges`: HNSW is used as coarse quantizer to search nearest top-`nprobe` centroids.
   This option specifies the number of edges in construction HNSW graph.
@@ -112,7 +112,7 @@ ________
 Subset kNN-MT (Deguchi et al., 2023)
 ------------------------------------
 
-The process is the same as in naive kNN-MT up to the target key vector computation using :code:`create_dastore_fairseq.py`.
+The process is the same as in naive kNN-MT up to the target key vector computation using :code:`store_keys.py`.
 
 Subset kNN-MT quantizes the target key vectors instead of building the kNN index.
 
@@ -121,18 +121,15 @@ Subset kNN-MT quantizes the target key vectors instead of building the kNN index
     PQ_PATH_PREFIX=${INDEX_DIR}/pq.ffn_in.M64
 
     python knn_seq/cli/build_index.py \
-        --datastore-path ${INDEX_DIR}/datastore.ffn_in.bin \
+        --key-storage ${INDEX_DIR}/keys.ffn_in.bin \
         --index-path-prefix ${PQ_PATH_PREFIX} \
         --train-size 5242880 \
         --chunk-size 10000000 \
-        --feature ffn_in \
-        --metric l2 \
         --pq-subvec 64 \  # Product quantization (PQ) to compress the all vectors to uint8 codes.
         --use-pca \
-        --transform-dim 256 \  # Reduce the dimension size by PCA
-        --verbose
+        --transform-dim 256  # Reduce the dimension size by PCA
 
-Next, construct the sentence datastore.
+Next, store the sentence key vectors.
 
 - Case1: Use LaBSE from sentence-transformers for the sentence encoder
 
@@ -142,15 +139,16 @@ Next, construct the sentence datastore.
     SRC_INDEX_DIR=${DATABIN_DIR}/index/de.${SRC_KEY}
     SRC_INDEX_PATH_PREFIX=${SRC_INDEX_DIR}/index.${SRC_KEY}.l2.nlist32768.M64
 
-    # Preprocess the source text that is used for the sentence datastore.
-    # In this case, give the detokenized source-side text. Sentences will be tokenized by the LaBSE tokenizer in :code:`binarize.py`.
-    python knn_seq/cli/binarize.py \
-        --input corpus/datastore-text.detok.de \
+    # Store values of the sentence datastore.
+    # In this case, give the detokenized source-side text.
+    # Sentences will be tokenized by the LaBSE tokenizer in :code:`store_values_hf.py`.
+    python knn_seq/cli/store_values_hf.py \
+        --input corpus/datastore-text.detok.de \ # Detokenized text
         --outdir ${SRC_INDEX_DIR} \
         sentence-transformers/LaBSE  # cf. https://huggingface.co/sentence-transformers/LaBSE
 
-    # Construct the sentence datastore.
-    python knn_seq/cli/create_datastore.py \
+    # Store key vectors of the sentence datastore.
+    python knn_seq/cli/store_keys_hf.py \
         --outdir ${SRC_INDEX_DIR} \
         --fp16 \
         --max-tokens 6000 \
@@ -165,21 +163,21 @@ Next, construct the sentence datastore.
     SRC_KEY=enc
     SRC_INDEX_DIR=${DATABIN_DIR}/index/de.${SRC_KEY}  # source index directory must be `{binarized_data}/index/${src_lang}.{src_key}`
 
-    # Preprocess the source text that is used for the sentence datastore.
-    python knn_seq/cli/binarize_fairseq.py \
+    # Store values of the sentence datastore.
+    python knn_seq/cli/store_values.py \
         --source-lang de --target-lang en \
         --srcdict wmt19.de-en.ffn8192/dict.de.txt \
         --tgtdict wmt19.de-en.ffn8192/dict.en.txt \
-        --trainpref corpus/datastore-text \
+        --trainpref corpus/datastore-text \  # Tokenized text
         --workers ${NUM_WORKERS} \
         --binarize-src \  # Binarize the source text.
         ${SRC_INDEX_DIR}
 
-    # Construct the sentence datastore.
-    python knn_seq/cli/create_datastore_fairseq.py \
+    # Store key vectors of the sentence datastore.
+    python knn_seq/cli/store_keys.py \
         --src-key ${SRC_KEY} \
         --path wmt19.de-en.ffn8192/wmt19.de-en.ffn8192.pt \
-        --num-workers ${NUM_WORKERS} \
+        --num-workers ${NUM_WORKERS} --num-gpus 1 \
         --fp16 \
         --max-tokens 6000 \
         --store-src-sent \
@@ -190,7 +188,7 @@ Then, build the index of the sentence datastore.
 .. code:: bash
 
     python knn_seq/cli/build_index.py \
-        --datastore-path ${SRC_INDEX_DIR}/datastore.${SRC_KEY}.bin \
+        --key-storage ${SRC_INDEX_DIR}/keys.${SRC_KEY}.bin \
         --index-path-prefix ${SRC_INDEX_PATH_PREFIX} \
         --train-size 5242880 \
         --chunk-size 10000000 \
@@ -199,8 +197,7 @@ Then, build the index of the sentence datastore.
         --ivf-lists 32768 \  # K-means clustering
         --pq-subvec 64 \  # Product quantization (PQ) to compress the all vectors to uint8 codes.
         --use-opq \  # Rotaion vectors to minimize the PQ error.
-        --transform-dim 256 \  # Reduce the dimension size.
-        --verbose
+        --transform-dim 256  # Reduce the dimension size.
 
 Generate translations using subset kNN-MT.
 

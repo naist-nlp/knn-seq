@@ -5,11 +5,12 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import LongTensor, Tensor
 
 from knn_seq import utils
 from knn_seq.data.token_storage import TokenStorage
-from knn_seq.models.fairseq_knn_model import FairseqKNNModel
+from knn_seq.models.fairseq_knn_model_vanilla import FairseqKNNModel
 from knn_seq.models.hf_model import HFModelBase
 from knn_seq.search_index import FaissIndex
 from knn_seq.search_index.torch_pq_index import TorchPQIndex
@@ -177,7 +178,9 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         )
         if self.knn_threshold is not None:
             scores[scores < self.knn_threshold] = float("-inf")
-        probs = utils.softmax(scores / self.knn_temperature).type_as(querys)
+        probs = F.softmax(
+            scores / self.knn_temperature, dim=-1, dtype=torch.float32
+        ).type_as(querys)
 
         return self.KNNOutput(scores, probs, tokens)
 

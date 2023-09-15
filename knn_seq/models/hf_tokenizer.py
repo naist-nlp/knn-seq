@@ -29,32 +29,38 @@ class HFTokenizer:
     Args:
         tokenizer (Any): wrapped tokenizer or dictionary class.
         pretokenized (bool): processes as tokenized text.
-        use_gpu (bool): use GPU.
+        device (str): the device to place tensors.
     """
 
     def __init__(
-        self, tokenizer: Any, pretokenized: bool = False, use_gpu: bool = False
+        self,
+        tokenizer: Any,
+        pretokenized: bool = False,
+        device: str = "cpu",
     ) -> None:
         self.tokenizer = tokenizer
         self.pretokenized = pretokenized
-        self.use_gpu = use_gpu
+        self.device = device
 
     @classmethod
     def build_tokenizer(
-        cls, name_or_path: str, pretokenized: bool = False, use_gpu: bool = False
+        cls,
+        name_or_path: str,
+        pretokenized: bool = False,
+        device: str = "cpu",
     ) -> "HFTokenizer":
         """Builds a tokenizer.
 
         Args:
             name_or_path (str): model name or path.
             pretokenized (bool): processes as tokenized text.
-            use_gpu (bool): use GPU.
+            device (str): the device to place tensors.
 
         Returns:
             HFTokenizer: this class.
         """
         tokenizer = AutoTokenizer.from_pretrained(name_or_path)
-        return cls(tokenizer, pretokenized=pretokenized, use_gpu=use_gpu)
+        return cls(tokenizer, pretokenized=pretokenized, device=device)
 
     def encode(self, line: Union[str, List[str]]) -> List[int]:
         """Encodes a line.
@@ -107,8 +113,8 @@ class HFTokenizer:
                 batch[key].append(value)
 
         batch = self.tokenizer.pad(batch, padding=True, return_tensors="pt")
-        if self.use_gpu:
-            batch = utils.to_device(batch, use_gpu=self.use_gpu)
+        if self.device != "cpu":
+            batch = utils.to_device(batch, device=self.device)
         return BatchEncoding(batch)
 
     def encode_lines(self, lines: List[str]) -> List[List[int]]:

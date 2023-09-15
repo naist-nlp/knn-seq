@@ -14,7 +14,7 @@ from fairseq.sequence_generator import EnsembleModel
 from torch import LongTensor, Tensor
 
 from knn_seq import utils
-from knn_seq.models.fairseq_knn_transformer import KNNTransformer
+from knn_seq.models.fairseq_knn_transformer import KEY_CHOICES, KNNTransformer
 
 logger = logging.getLogger(__name__)
 
