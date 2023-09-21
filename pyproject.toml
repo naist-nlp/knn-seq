@@ -10,7 +10,7 @@ packages = [{include = "knn_seq"}]
 [tool.poetry.dependencies]
 python = "^3.8"
 torch = "2.0.0"
-fairseq = "0.12.1"
+fairseq = {git = "https://github.com/facebookresearch/fairseq.git", tag = "v0.12.3"}
 faiss-gpu = "^1.7.2"
 sentence-transformers = "^2.2.2"
 h5py = "^3.9.0"
