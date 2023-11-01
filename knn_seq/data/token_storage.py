@@ -66,9 +66,9 @@ class TokenStorage:
 
     @property
     def sort_order(self) -> NDArray:
-        """Datastore order array.
+        """Sort order array.
 
-        Each element maps a datastore index to a sequnece index. [sort_seq_idx -> orig_seq_idx]
+        Each element maps a sorted index to a sequnece index. [sort_seq_idx -> orig_seq_idx]
         """
         return self._sort_order
 
@@ -76,18 +76,18 @@ class TokenStorage:
     def orig_order(self) -> NDArray:
         """Original order array.
 
-        Each element maps a sequence index to a datastore index. [orig_seq_idx -> sort_seq_idx]
+        Each element maps a sequence index to a sorted index. [orig_seq_idx -> sort_seq_idx]
         """
         return self._orig_order
 
     def get_interval(self, idx: int) -> NDArray:
-        """Gets the datastore keys of the given sequence index.
+        """Gets the token indices of the given sequence index.
 
         Args:
             idx (int): sequence index.
 
         Returns:
-            NDArray: datastore keys.
+            NDArray: token indices.
         """
         ds_idx = self.orig_order[idx]
         return np.arange(self.offsets[ds_idx], self.offsets[ds_idx + 1])

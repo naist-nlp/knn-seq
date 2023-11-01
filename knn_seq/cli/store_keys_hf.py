@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from knn_seq.data import Datastore, TokenStorage
+from knn_seq.data import KeyStorage, TokenStorage
 from knn_seq.models import build_hf_model
 from knn_seq.models.hf_model import HFModelBase
 
@@ -75,8 +75,8 @@ def parse_args():
                              "  - senttr: using sentence-transformers")
     parser.add_argument("model_name", metavar="MODEL_NAME",
                         help="model/tokenizer name for huggingface models")
-    parser.add_argument("--compress-datastore", action="store_true",
-                        help="compress the datastore")
+    parser.add_argument("--compress", action="store_true",
+                        help="compress the key storage")
     # fmt: on
     return parser.parse_args()
 
@@ -107,30 +107,30 @@ def main(args):
     def batch_iterator():
         for indices in tqdm(
             list(batch_sampler(val, max_tokens, max_sentences)),
-            desc="Datastore creation",
+            desc="Store key vectors",
         ):
             yield [val[idx].tolist() for idx in indices]
 
-    datastore_path = os.path.join(args.outdir, "datastore.{}.bin".format(args.feature))
-    with Datastore.open(
-        datastore_path,
+    key_storage_path = os.path.join(args.outdir, "keys.{}.bin".format(args.feature))
+    with KeyStorage.open(
+        key_storage_path,
         len(val),
         dim=model.get_embed_dim(),
         dtype=np.float16 if args.fp16 else np.float32,
         readonly=False,
-        compress=args.compress_datastore,
-    ) as ds:
+        compress=args.compress,
+    ) as key_storage:
 
         def _add_examples(
             rank: int, model: HFModelBase, batch: List[List[int]], begin: int, end: int
         ) -> int:
             net_inputs = model.tokenizer.collate(batch)
             net_outputs = model(net_inputs)
-            ds.write_range(net_outputs.cpu().numpy(), begin, end)
+            key_storage.write_range(net_outputs.cpu().numpy(), begin, end)
             return rank
 
-        logger.info(f"Creating the datastore to {datastore_path}")
-        logger.info(f"Datastore size: {len(val):,}")
+        logger.info(f"Creating the key storage to {key_storage_path}")
+        logger.info(f"Storage size: {len(val):,}")
         start_time = time.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=num_replicas

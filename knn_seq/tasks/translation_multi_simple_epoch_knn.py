@@ -22,7 +22,7 @@ from fairseq.tasks.translation_multi_simple_epoch import TranslationMultiSimpleE
 from torch import LongTensor
 
 from knn_seq.data import TokenStorage
-from knn_seq.dataset_wrapper import (
+from knn_seq.tasks.dataset_wrapper import (
     LanguagePairDatasetWithOriginalOrder,
     LanguagePairDatasetWithRawSentence,
 )
@@ -85,8 +85,8 @@ class MultilingualDatasetManagerWrapper(MultilingualDatasetManager):
         return ds
 
 
-@register_task("translation_knn_multi")
-class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
+@register_task("translation_multi_simple_epoch_knn")
+class TranslationMultiSimpleEpochKnnTask(TranslationMultiSimpleEpochTask):
     """
     Translate from one (source) language to another (target) language.
 
@@ -142,18 +142,27 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
         """Add task-specific arguments to the parser."""
         TranslationMultiSimpleEpochTask.add_args(parser)
         # fmt: off
-        parser.add_argument("--knn-key", type=str, default="ffn_in", help="Type of kNN key.")
-        parser.add_argument("--knn-metric", type=str, default="l2", help="Distance function for kNN.")
-        parser.add_argument("--knn-topk", type=int, default=16, help="Retrieve top-k nearest neighbors.")
+        parser.add_argument("--knn-key", type=str, default="ffn_in",
+                            help="Type of kNN key.")
+        parser.add_argument("--knn-metric", type=str, default="l2",
+                            help="Distance function for kNN.")
+        parser.add_argument("--knn-topk", type=int, default=16,
+                            help="Retrieve top-k nearest neighbors.")
         parser.add_argument("--knn-nprobe", type=int, default=32,
                             help="Retrieve tokens from nprobe-nearest clusters."
                             "This option is only used when using IVF index.")
-        parser.add_argument("--knn-efsearch", type=int, default=64, help="This option is only used when using HNSW search.")
-        parser.add_argument("--knn-index-path", type=str, default="", help="Path to the kNN index.")
-        parser.add_argument("--knn-value-path", type=str, default="", help="Path to the values of datastore.")
-        parser.add_argument("--src-key", type=str, default="senttr", help="Type of source-side key.")
-        parser.add_argument("--src-metric", type=str, default="l2", help="Distance function for source-side kNN.")
-        parser.add_argument("--src-knn-model", type=str, default=None, help="Source kNN model.")
+        parser.add_argument("--knn-efsearch", type=int, default=64,
+                            help="This option is only used when using HNSW search.")
+        parser.add_argument("--knn-index-path", type=str, default="",
+                            help="Path to the kNN index.")
+        parser.add_argument("--knn-value-path", type=str, default="",
+                            help="Path to the values of datastore.")
+        parser.add_argument("--src-key", type=str, default="senttr",
+                            help="Type of source-side key.")
+        parser.add_argument("--src-metric", type=str, default="l2",
+                            help="Distance function for source-side kNN.")
+        parser.add_argument("--src-knn-model", type=str, default=None,
+                            help="Source kNN model.")
         parser.add_argument("--src-topk", type=int, default=5,
                             help="Retrieve top-k nearest neighbor sentences.")
         parser.add_argument("--src-nprobe", type=int, default=64,
@@ -161,8 +170,10 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
                             "This option is only used when using IVF index.")
         parser.add_argument("--src-efsearch", type=int, default=64,
                             help="This option is only used when using HNSW search.")
-        parser.add_argument("--src-index-path", type=str, default="", help="Path to the source-side kNN index.")
-        parser.add_argument("--src-value-path", type=str, default="", help="Path to the source-side values of datastore.")
+        parser.add_argument("--src-index-path", type=str, default="",
+                            help="Path to the source-side kNN index.")
+        parser.add_argument("--src-value-path", type=str, default="",
+                            help="Path to the source-side values of datastore.")
         parser.add_argument("--knn_threshold", type=float, default=None,
                             help="Drop out retrieved neighbors that have lower scores than the threshold.")
         parser.add_argument("--knn-weight", type=float, default=0.0,
@@ -173,7 +184,8 @@ class TranslationKnnMultiTask(TranslationMultiSimpleEpochTask):
                             help="use CPU to retrieve")
         parser.add_argument("--knn-ensemble", action="store_true",
                             help="Retrieve kNN in each model")
-        parser.add_argument("--knn-gpuivf", action="store_true", help="use IVF on GPU.")
+        parser.add_argument("--knn-gpuivf", action="store_true",
+                            help="use IVF on GPU.")
         # fmt: on
 
     def build_dataset_for_inference(

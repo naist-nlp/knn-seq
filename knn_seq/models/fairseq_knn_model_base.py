@@ -14,7 +14,7 @@ from fairseq.sequence_generator import EnsembleModel
 from torch import LongTensor, Tensor
 
 from knn_seq import utils
-from knn_seq.models.fairseq_knn_transformer import KNNTransformer
+from knn_seq.models.fairseq_knn_transformer import KEY_CHOICES, KNNTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,9 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
         """Set beam size for efficient beamable enc-dec attention."""
         super().set_decoder_beam_size(beam_size)
         self.beam_size = beam_size
+
+    def clear_cache(self) -> None:
+        """Clear the cache."""
 
     def forward(
         self,

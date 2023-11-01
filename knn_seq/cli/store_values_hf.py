@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import concurrent.futures
 import logging
 import os
 import sys
@@ -47,12 +47,16 @@ def main(args):
 
     logger.info("Binarize the text.")
     encoded_lines = []
-    for lines in utils.parallel_apply(
-        tokenizer.encode_lines,
-        utils.read_lines(args.input, args.buffer_size, progress=True),
-        num_workers=args.num_workers,
-    ):
-        encoded_lines.extend(lines)
+
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=args.num_workers
+    ) as executor:
+        for lines in executor.map(
+            tokenizer.encode_lines,
+            utils.read_lines(args.input, args.buffer_size, progress=True),
+        ):
+            encoded_lines.extend(lines)
+
     val = TokenStorage.binarize(encoded_lines)
     val.save(args.outdir)
 

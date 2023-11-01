@@ -23,13 +23,13 @@ from omegaconf import II
 from torch import LongTensor
 
 from knn_seq.data import TokenStorage
-from knn_seq.dataset_wrapper import (
-    LanguagePairDatasetWithOriginalOrder,
-    LanguagePairDatasetWithRawSentence,
-)
 from knn_seq.models import FairseqKNNModel, FairseqSubsetKNNModel, build_hf_model
 from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
 from knn_seq.search_index import FaissIndex, load_index
+from knn_seq.tasks.dataset_wrapper import (
+    LanguagePairDatasetWithOriginalOrder,
+    LanguagePairDatasetWithRawSentence,
+)
 
 logging.basicConfig(
     format="| %(asctime)s | %(levelname)s | %(message)s",
@@ -368,4 +368,5 @@ class TranslationKnnTask(TranslationTask):
                 src_knn_i = model.src_knn[i]
                 print("R-{}\t{}".format(sample_id, " ".join(map(str, src_knn_i))))
 
+        model.clear_cache()
         return results

@@ -5,11 +5,12 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import LongTensor, Tensor
 
 from knn_seq import utils
 from knn_seq.data.token_storage import TokenStorage
-from knn_seq.models.fairseq_knn_model import FairseqKNNModel
+from knn_seq.models.fairseq_knn_model_vanilla import FairseqKNNModel
 from knn_seq.models.hf_model import HFModelBase
 from knn_seq.search_index import FaissIndex
 from knn_seq.search_index.torch_pq_index import TorchPQIndex
@@ -87,6 +88,23 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         self.beam_size = beam_size
         self.subset_index.set_beam_size(beam_size)
 
+    def clear_cache(self) -> None:
+        """Clear the caches.
+
+        Subset kNN-MT has the following two caches on a CUDA memory during decoding.
+        - `subset_tokens` (Tensor): Vocabulary IDs of the subset tokens of shape
+           `(batch_size, max_subset_size)`.
+        - `subset_index.subset_codes` (List[Tensor]): A list of uint8 PQ codes of subset
+           tokens. Length of the list is equal to the batch size. The shape of each
+           element is `(subset_size, M)`, where `M` is the number of subvectors in PQ.
+
+        Since faiss and PyTorch manage CUDA memory separately, they must be explicitly
+        released to reduce the memory footprint.
+        """
+        del self.subset_tokens
+        del self.subset_index.subset_codes
+        torch.cuda.empty_cache()
+
     @torch.jit.export
     def forward_encoder(
         self, net_input: Dict[str, Tensor]
@@ -160,7 +178,9 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         )
         if self.knn_threshold is not None:
             scores[scores < self.knn_threshold] = float("-inf")
-        probs = utils.softmax(scores / self.knn_temperature).type_as(querys)
+        probs = F.softmax(
+            scores / self.knn_temperature, dim=-1, dtype=torch.float32
+        ).type_as(querys)
 
         return self.KNNOutput(scores, probs, tokens)
 

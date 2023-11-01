@@ -2,40 +2,14 @@ import fileinput
 import logging
 import time
 from collections import UserDict, UserList
-from concurrent import futures
-from typing import Any, Callable, Iterable, Iterator, List, Optional, TypeVar
+from typing import Any, Iterator, List
 
 import fairseq
-import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-
-
-def buffer_lines(lines: Iterable, buffer_size: int = 10000) -> Iterator[List[str]]:
-    """Yields buffered lines.
-
-    Args:
-        lines (Iterable): input lines.
-        buffer_size (int): buffer size.
-
-    Yields:
-        List[str]: buffered lines.
-    """
-    if buffer_size <= 0:
-        raise ValueError("buffer_size must be at least 1")
-
-    buffer = []
-    for line in lines:
-        buffer.append(line)
-        if len(buffer) >= buffer_size:
-            yield buffer
-            buffer = []
-    if len(buffer) > 0:
-        yield buffer
 
 
 def read_lines(
@@ -50,6 +24,8 @@ def read_lines(
     Yields:
         List[str]: buffered input lines.
     """
+    if buffer_size <= 0:
+        raise ValueError("buffer_size must be at least 1")
 
     def progress_bar(buf):
         if progress:
@@ -57,95 +33,35 @@ def read_lines(
         return buf
 
     with fileinput.input([input], openhook=fileinput.hook_encoded("utf-8")) as f:
-        for lines in buffer_lines(progress_bar(f), buffer_size=buffer_size):
-            yield lines
+        buffer = []
+        for line in progress_bar(f):
+            buffer.append(line)
+            if len(buffer) >= buffer_size:
+                yield buffer
+                buffer = []
+        if len(buffer) > 0:
+            yield buffer
 
 
-T = TypeVar("T")
-
-
-def parallel_apply(
-    func: Callable[[Any], T], iterable: Iterable, num_workers: int = 1
-) -> Iterator[T]:
-    """Applys a function to an iterable object in parallel.
-
-    Args:
-        func (Callable[[Any], T]): a function to be applied to an iterable object.
-        iterable (Iterable): an iterable object
-        num_workers (int): number of workers.
-
-    Yields:
-        T: the object to which the function is applied.
-    """
-
-    if num_workers < 1:
-        raise ValueError(f"num_workers must be at least 1, but got {num_workers}")
-
-    if num_workers > 1:
-        with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
-            for res in executor.map(func, iterable):
-                yield res
-    else:
-        for buffer in iterable:
-            yield func(buffer)
-
-
-def to_ndarray(x):
-    if isinstance(x, np.ndarray):
-        return x
-    if torch.is_tensor(x):
-        return x.cpu().numpy()
-    return np.array(x)
-
-
-def to_device(item: Any, use_gpu: bool = True, device: Optional[int] = None) -> Any:
+def to_device(item: Any, device: str = "cpu") -> Any:
     """Transfers tensors in arbitrary data structres to a specific device.
 
     Args:
         item (Any): arbitrary data structures.
-        use_gpu (bool): if True, tensors in `item` are transfered to GPUs, otherwise to CPUs.
-        device (int, optional): CUDA device.
+        device (str): tensors in `item` are transfered to specified devices.
 
     Returns:
         Any: the object that is trasfered to the device.
     """
     item_type = type(item)
     if torch.is_tensor(item):
-        if use_gpu:
-            return item.cuda(device=device)
-        return item.cpu()
+        return item.to(device=device)
     elif isinstance(item, (dict, UserDict)):
-        return item_type(
-            {k: to_device(v, use_gpu=use_gpu, device=device) for k, v in item.items()}
-        )
+        return item_type({k: to_device(v, device=device) for k, v in item.items()})
     elif isinstance(item, (list, UserList)):
-        return item_type([to_device(x, use_gpu=use_gpu, device=device) for x in item])
+        return item_type([to_device(x, device=device) for x in item])
     else:
         return item
-
-
-def softmax(scores: Tensor):
-    """Computes probability distributions.
-
-    Args:
-        scores (FloatTensor): scores tensor.
-
-    Returns:
-        Tensor: probability distributions.
-    """
-    return F.softmax(scores, dim=-1, dtype=torch.float32)
-
-
-def log_softmax(scores: Tensor):
-    """Computes log probability distributions.
-
-    Args:
-        scores (FloatTensor): scores tensor.
-
-    Returns:
-        Tensor: log probability distributions.
-    """
-    return F.log_softmax(scores, dim=-1, dtype=torch.float32)
 
 
 def pad(tensors: List[Tensor], padding_idx: int) -> Tensor:
