@@ -24,7 +24,7 @@ from torch import LongTensor
 
 from knn_seq.data import TokenStorage
 from knn_seq.models import FairseqKNNModel, FairseqSubsetKNNModel, build_hf_model
-from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
+from knn_seq.models.fairseq_knn_model_base import KEY_CHOICES, FairseqKNNModelBase
 from knn_seq.search_index import FaissIndex, load_index
 from knn_seq.tasks.dataset_wrapper import (
     LanguagePairDatasetWithOriginalOrder,
@@ -48,7 +48,9 @@ INDEX_METRIC_CHOICES = ChoiceEnum(["l2", "ip", "cos"])
 
 @dataclass
 class TranslationKnnConfig(TranslationConfig):
-    knn_key: str = field(default="ffn_in", metadata={"help": "Type of kNN key."})
+    knn_key: KEY_CHOICES = field(
+        default="ffn_in", metadata={"help": "Type of kNN key."}
+    )
     knn_metric: INDEX_METRIC_CHOICES = field(
         default="l2", metadata={"help": "Distance function for kNN."}
     )
