@@ -1,67 +1,12 @@
-import fileinput
+import contextlib
 import logging
 import time
-from collections import UserDict, UserList
-from typing import Any, Iterator, List
+from typing import List
 
-import fairseq
 import torch
 from torch import Tensor
-from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-
-
-def read_lines(
-    input: str, buffer_size: int = 10000, progress: bool = False
-) -> Iterator[List[str]]:
-    """Reads lines from file or stdin.
-
-    Args:
-        input (str): input file path or `-` for stdin.
-        buffer_size (int): buffer size.
-
-    Yields:
-        List[str]: buffered input lines.
-    """
-    if buffer_size <= 0:
-        raise ValueError("buffer_size must be at least 1")
-
-    def progress_bar(buf):
-        if progress:
-            return tqdm(buf)
-        return buf
-
-    with fileinput.input([input], openhook=fileinput.hook_encoded("utf-8")) as f:
-        buffer = []
-        for line in progress_bar(f):
-            buffer.append(line)
-            if len(buffer) >= buffer_size:
-                yield buffer
-                buffer = []
-        if len(buffer) > 0:
-            yield buffer
-
-
-def to_device(item: Any, device: str = "cpu") -> Any:
-    """Transfers tensors in arbitrary data structres to a specific device.
-
-    Args:
-        item (Any): arbitrary data structures.
-        device (str): tensors in `item` are transfered to specified devices.
-
-    Returns:
-        Any: the object that is trasfered to the device.
-    """
-    item_type = type(item)
-    if torch.is_tensor(item):
-        return item.to(device=device)
-    elif isinstance(item, (dict, UserDict)):
-        return item_type({k: to_device(v, device=device) for k, v in item.items()})
-    elif isinstance(item, (list, UserList)):
-        return item_type([to_device(x, device=device) for x in item])
-    else:
-        return item
 
 
 def pad(tensors: List[Tensor], padding_idx: int) -> Tensor:
@@ -82,61 +27,45 @@ def pad(tensors: List[Tensor], padding_idx: int) -> Tensor:
     return new_tensor
 
 
-class StopwatchMeter:
-    """Stopwatch meter class to computes the sum/avg duration of some event in seconds.
+class Stopwatch:
+    """Stopwatch meter class to computes the duration of some event in seconds.
 
-    The original implementation is :code:`fairseq.meters.StopwatchMeter`.
+    Attributes:
+        acc (float): Accumulated time.
+        lap (float): Lap time of the latest event.
+
+    Example:
+        >>> timer = Stopwatch()
+        >>> for i in range(10):
+                with timer():
+                    time.sleep(1)
+        >>> print(f"{timer.acc:.3f}")
+        10.000
     """
 
     def __init__(self):
-        self.sum = 0
-        self.n = 0
-        self.start_time = None
-        self.stop_time = None
-
-    def start(self):
-        self.start_time = time.perf_counter()
-        self.stop_time = None
-
-    def stop(self, n: int = 1, prehook=None):
-        if self.stop_time is not None:
-            # already stopped and wasn't started again
-            return
-
-        stop_time = time.perf_counter()
-        if self.start_time is not None:
-            if prehook is not None:
-                prehook()
-            self.stop_time = stop_time
-            delta = stop_time - self.start_time
-            self.sum = self.sum + delta
-            self.n = fairseq.meters.type_as(self.n, n) + n
+        self.reset()
 
     def reset(self):
-        self.sum = 0  # cumulative time during which stopwatch was active
-        self.n = 0  # total n across all start/stop
-        self.stop_time = None
-        self.start_time = None
+        self.n = 0
+        self.acc = 0.0
+
+    @contextlib.contextmanager
+    def __call__(self):
+        """Measure the time."""
+        start = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.acc += time.perf_counter() - start
+            self.n += 1
 
     @property
-    def avg(self):
-        return self.sum / self.n if self.n > 0 else self.sum
+    def avg(self) -> float:
+        """Returns the averaged time per event."""
+        return self.acc / float(self.n) if self.n > 0 else 0.0
 
-    @property
-    def elapsed_time(self):
-        if self.start_time is None or self.stop_time is not None:
-            return 0.0
-        return time.perf_counter() - self.start_time
-
-    @property
-    def lap_time(self):
-        if self.start_time is None:
-            return 0.0
-        elif self.stop_time is None:
-            return self.elapsed_time
-        return self.stop_time - self.start_time
-
-    def log_time(self, label: str):
+    def log(self, label: str):
         logger.info(
-            f"[Time] {label}: {self.lap_time:.3f} s, avg: {self.avg:.3f} s, sum: {self.sum:.3f} s"
+            f"[Time] {label}: acc: {self.acc:.3f} s, avg: {self.avg:.3f} s (n={self.n})"
         )

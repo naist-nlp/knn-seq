@@ -75,8 +75,7 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         self.src_index = src_index
         self.src_topk = src_topk
 
-        self.src_knn_timer = utils.StopwatchMeter()
-        self.reorder_timer = utils.StopwatchMeter()
+        self.src_knn_timer = utils.Stopwatch()
 
     def set_decoder_beam_size(self, beam_size: int) -> None:
         """Set beam size for efficient computation.
@@ -118,42 +117,42 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         ]
 
         # Source sentence search
-        self.src_knn_timer.start()
-        device = net_input["src_tokens"].device
-        if self.src_knn_model is None:
-            src_query = self.extract_sentence_features_from_encoder_outs(encoder_outs)[
-                0
+        with self.src_knn_timer():
+            device = net_input["src_tokens"].device
+            if self.src_knn_model is None:
+                src_query = self.extract_sentence_features_from_encoder_outs(encoder_outs)[
+                    0
+                ]
+            elif isinstance(self.src_knn_model, HFModelBase):
+                tokenizer = self.src_knn_model.tokenizer
+                src_query = self.src_knn_model(
+                    tokenizer.collate([tokenizer.encode(sent) for sent in self.src_sents])
+                )
+            else:
+                raise NotImplementedError
+
+            _, src_indices = self.src_index.search(
+                src_query, k=self.src_topk, idmap=self.src_val.sort_order
+            )
+            self.src_knn = src_indices.tolist()
+
+            subset_sent_idxs = self.val.orig_order[src_indices.numpy()]
+            subset_indices = [
+                np.concatenate([np.arange(b_ik, e_ik) for b_ik, e_ik in zip(b_i, e_i)])
+                for b_i, e_i in zip(
+                    self.val.offsets[subset_sent_idxs],
+                    self.val.offsets[subset_sent_idxs + 1],
+                )
             ]
-        elif isinstance(self.src_knn_model, HFModelBase):
-            tokenizer = self.src_knn_model.tokenizer
-            src_query = self.src_knn_model(
-                tokenizer.collate(tokenizer.encode_lines(self.src_sents))
+            self.subset_index.set_subsets(
+                [torch.LongTensor(subset) for subset in subset_indices]
             )
-        else:
-            raise NotImplementedError
+            subset_tokens = [
+                torch.LongTensor(self.val.tokens[subset]) for subset in subset_indices
+            ]
+            self.subset_tokens = utils.pad(subset_tokens, self.pad).to(device)
 
-        _, src_indices = self.src_index.search(
-            src_query, k=self.src_topk, idmap=self.src_val.sort_order
-        )
-        self.src_knn = src_indices.tolist()
-
-        subset_sent_idxs = self.val.orig_order[src_indices.numpy()]
-        subset_indices = [
-            np.concatenate([np.arange(b_ik, e_ik) for b_ik, e_ik in zip(b_i, e_i)])
-            for b_i, e_i in zip(
-                self.val.offsets[subset_sent_idxs],
-                self.val.offsets[subset_sent_idxs + 1],
-            )
-        ]
-        self.subset_index.set_subsets(
-            [torch.LongTensor(subset) for subset in subset_indices]
-        )
-        subset_tokens = [
-            torch.LongTensor(self.val.tokens[subset]) for subset in subset_indices
-        ]
-        self.subset_tokens = utils.pad(subset_tokens, self.pad).to(device)
-        self.src_knn_timer.stop(n=len(src_query))
-
+        self.src_knn_timer.log("Source search")
         return encoder_outs
 
     def search(
@@ -203,17 +202,9 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         new_outs: List[Dict[str, List[Tensor]]] = super().reorder_encoder_out(
             encoder_outs, new_order
         )
-
-        self.reorder_timer.start()
-
         new_batch_order = new_order[:: self.beam_size] // self.beam_size
-
         if self.subset_tokens.size(0) == new_batch_order.size(0):
-            self.reorder_timer.stop(len(new_order))
             return new_outs
-
         self.subset_tokens = self.subset_tokens.index_select(0, new_batch_order)
         self.subset_index.reorder_encoder_out(new_order)
-        self.reorder_timer.stop(len(new_order))
-
         return new_outs

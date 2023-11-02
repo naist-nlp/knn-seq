@@ -99,9 +99,6 @@ def main(args):
         model_replicas = [model]
     num_replicas = len(model_replicas)
 
-    for m in model_replicas:
-        m.tokenizer.pretokenized = True
-
     val = TokenStorage.load(args.outdir)
 
     def batch_iterator():

@@ -1,4 +1,3 @@
-import re
 from typing import Dict
 
 import torch.nn as nn
@@ -87,9 +86,7 @@ class SentenceTransformerModel(HFModelBase):
     def __init__(self, name_or_path: str) -> None:
         super(HFModelBase, self).__init__()
         self.name_or_path = name_or_path
-        self.model = SentenceTransformer(
-            re.sub(r"^sentence-transformers/", "", name_or_path)
-        )
+        self.model = SentenceTransformer(name_or_path)
         self.init_model()
         self.tokenizer = HFTokenizer(self.model.tokenizer)
 
@@ -124,7 +121,7 @@ def build_hf_model(model_name: str, feature: str) -> HFModelBase:
     Returns:
         HFModelBase: wrappered huggingface model.
     """
-    if model_name.startswith("sentence-transformers/"):
+    if feature == "senttr" or model_name.startswith("sentence-transformers/"):
         return SentenceTransformerModel(model_name)
     elif feature == "avg":
         return HFModelAvg(model_name)

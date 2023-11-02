@@ -3,9 +3,10 @@ import concurrent.futures
 import logging
 import os
 import sys
-from argparse import ArgumentParser, RawTextHelpFormatter
+from argparse import ArgumentParser
 
-from knn_seq import utils
+from tqdm import tqdm
+
 from knn_seq.data import TokenStorage
 from knn_seq.models.hf_tokenizer import HFTokenizer
 
@@ -20,15 +21,15 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
     # fmt: off
-    parser = ArgumentParser(formatter_class=RawTextHelpFormatter)
+    parser = ArgumentParser()
     parser.add_argument("--input", "-i", metavar="FILE", required=True,
                         help="input file")
     parser.add_argument("--outdir", "-o", metavar="DIR", default="index",
                         help="output directory")
-    parser.add_argument("--buffer-size", "-b", metavar="BUFSIZE", type=int, default=100000)
-    parser.add_argument("--num-workers", "-n", metavar="N", type=int, default=8)
-    parser.add_argument("--pretokenized", action="store_true",
-                        help="if set, word and sub-word tokenizers are not used and only encode tokens in vocabulary IDs.")
+    parser.add_argument("--buffer-size", "-b", metavar="BUFSIZE", type=int, default=100000,
+                        help="buffer size to read lines")
+    parser.add_argument("--num-workers", "-n", metavar="N", type=int, default=8,
+                        help="number of workers to encode lines")
     parser.add_argument("model_name_or_path", metavar="MODEL",
                         help="model name or path")
     # fmt: on
@@ -41,9 +42,7 @@ def main(args):
     if not os.path.exists(args.outdir):
         os.makedirs(args.outdir, exist_ok=True)
 
-    tokenizer = HFTokenizer.build_tokenizer(
-        args.model_name_or_path, pretokenized=args.pretokenized
-    )
+    tokenizer = HFTokenizer.build_tokenizer(args.model_name_or_path)
 
     logger.info("Binarize the text.")
     encoded_lines = []
@@ -51,11 +50,10 @@ def main(args):
     with concurrent.futures.ProcessPoolExecutor(
         max_workers=args.num_workers
     ) as executor:
-        for lines in executor.map(
-            tokenizer.encode_lines,
-            utils.read_lines(args.input, args.buffer_size, progress=True),
-        ):
-            encoded_lines.extend(lines)
+        with open(args.input, mode="r") as f:
+            encoded_lines = list(
+                tqdm(executor.map(tokenizer.encode, f, chunksize=args.buffer_size))
+            )
 
     val = TokenStorage.binarize(encoded_lines)
     val.save(args.outdir)
