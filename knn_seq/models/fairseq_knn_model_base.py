@@ -7,16 +7,42 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import torch
+import torch.nn as nn
 from fairseq.data.dictionary import Dictionary
+from fairseq.dataclass import ChoiceEnum
 from fairseq.models import FairseqEncoderDecoderModel
 from fairseq.models.transformer import TransformerModelBase
 from fairseq.sequence_generator import EnsembleModel
 from torch import LongTensor, Tensor
 
 from knn_seq import utils
-from knn_seq.models.fairseq_knn_transformer import KEY_CHOICES, KNNTransformer
+
+KEY_CHOICES = ChoiceEnum(["ffn_in", "ffn_out"])
+
 
 logger = logging.getLogger(__name__)
+
+
+class FeatureExtractor(nn.Module):
+    """Hook class to extract feature vectors."""
+
+    def __init__(self, extract_input: bool = False):
+        super().__init__()
+        self.extra_input = extract_input
+        self.features = None
+
+    def forward(self, module, args, output):
+        if self.extra_input:
+            self.features = args[0].detach().transpose(0, 1)
+        else:
+            if isinstance(output, tuple):
+                output = output[0]
+            self.features = output.detach().transpose(0, 1)
+
+    def get(self) -> Tensor:
+        features = self.features
+        self.features = None
+        return features
 
 
 class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
@@ -33,16 +59,26 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
         self.tgt_dict: Dictionary = self.single_model.decoder.dictionary
         self.pad = self.tgt_dict.pad()
 
-        self.wrapped_models = [
-            KNNTransformer(m, key) if isinstance(m, TransformerModelBase) else m
-            for m in models
-        ]
-
+        self.knn_key = key
         self.knn_weight: float = 0.0
         self.knn_threshold: Optional[float] = None
         self.knn_ensemble = knn_ensemble
 
         self.knn_timer = utils.StopwatchMeter()
+
+        self.register_feature_extractor(key)
+
+    def register_feature_extractor(self, key: str):
+        self.feature_extractors = [
+            FeatureExtractor(key == "ffn_in") for _ in self.models
+        ]
+
+        for m, extractor in zip(self.models, self.feature_extractors):
+            if isinstance(m, TransformerModelBase):
+                if key == "ffn_in":
+                    m.decoder.layers[-1].fc1.register_forward_hook(extractor)
+                elif key == "ffn_out":
+                    m.decoder.layers[-1].register_forward_hook(extractor)
 
     @abc.abstractmethod
     def set_index(self, *args, **kwargs) -> None:
@@ -107,21 +143,16 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
             # returns (B x C)
             return encoder_sentence_features
 
-        decoder_outputs = [
+        for model in self.models:
             model(
                 src_tokens,
                 src_lengths,
                 prev_output_tokens=prev_output_tokens,
                 features_only=True,
             )
-            for model in self.wrapped_models
-        ]
-        decoder_features = [
-            decoder_out[1]["features"][0] for decoder_out in decoder_outputs
-        ]
 
         # returns (B x T x C)
-        return decoder_features
+        return [extractor.get() for extractor in self.feature_extractors]
 
     def extract_sentence_features_from_encoder_outs(
         self, encoder_outs: Optional[List[Dict[str, List[Tensor]]]]
@@ -259,8 +290,8 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
         log_probs = []
         avg_attn: Optional[Tensor] = None
         encoder_out: Optional[Dict[str, List[Tensor]]] = None
-        knn_querys: Tensor
-        for i, model in enumerate(self.wrapped_models):
+        knn_querys: Optional[Tensor] = None
+        for i, model in enumerate(self.models):
             if self.has_encoder():
                 encoder_out = encoder_outs[i]
             # decode each model
@@ -288,7 +319,7 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
                     attn = attn[:, -1, :]
 
                 if self.knn_ensemble or i == 0:
-                    knn_querys = decoder_out[1]["features"][0][:, -1, :]
+                    knn_querys = self.feature_extractors[i].get()[:, -1, :]
 
             decoder_out_tuple = (
                 decoder_out[0][:, -1:, :].div_(temperature),
@@ -300,7 +331,7 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
             lprobs = lprobs[:, -1, :]
 
             # kNN-MT
-            if self.knn_ensemble:
+            if self.knn_ensemble and knn_querys is not None:
                 lprobs, knn_output = self.add_knn_probs(lprobs, knn_querys, index_id=i)
 
             if self.models_size == 1:
@@ -325,7 +356,7 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
             attn = avg_attn
 
         # kNN-MT
-        if not self.knn_ensemble:
+        if not self.knn_ensemble and knn_querys is not None:
             lprobs, knn_output = self.add_knn_probs(lprobs, knn_querys)
 
         return lprobs, attn, knn_output
