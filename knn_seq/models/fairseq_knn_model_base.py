@@ -82,7 +82,21 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
         output_encoder_features: bool = False,
         **kawrgs,
     ) -> List[Tensor]:
+        """Computes the forward.
 
+        Args:
+            src_tokens (LongTensor): Source tokens of shape `(bsz, src_len)`.
+            src_lengths (LongTensor): Source lengths of shape `(bsz,)`.
+            prev_output_tokens (LongTensor, optional): Previous output tokens of shape
+              `(bsz, tgt_len)`.
+            output_encoder_features (bool): Output the encoder features instead of
+              the decoder features.
+
+        Returns:
+            List[Tensor]: Encoder or decoder's feature vectors of shape.
+              When the encoder features are returned, the shape is `(bsz, dim)`.
+              When the decoder features are returned, the shape is `(bsz, tgt_len, dim)`.
+        """
         if output_encoder_features:
             encoder_sentence_features = self.extract_sentence_features(
                 {
@@ -106,6 +120,7 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
             decoder_out[1]["features"][0] for decoder_out in decoder_outputs
         ]
 
+        # returns (B x T x C)
         return decoder_features
 
     def extract_sentence_features_from_encoder_outs(

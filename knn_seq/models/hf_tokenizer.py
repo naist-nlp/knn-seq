@@ -1,5 +1,5 @@
 import re
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
 from transformers import AutoTokenizer
 from transformers.tokenization_utils import BatchEncoding
@@ -103,6 +103,7 @@ class HFTokenizer:
                 None,
                 add_spenical_tokens=True,
                 padding=False,
+                truncation=True,
                 pad_to_multiple_of=None,
                 return_attention_mask=False,
                 return_tensors=None,
