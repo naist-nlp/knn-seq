@@ -17,7 +17,10 @@ def call_preprocess(args: Namespace) -> None:
 
 
 def main(args: Namespace):
-    call_preprocess(args)
+    if not args.only_store_value:
+        call_preprocess(args)
+    else:
+        print(args)
 
     cfg = convert_namespace_to_omegaconf(args)
 
@@ -36,6 +39,8 @@ def cli_main():
     # fmt: off
     group.add_argument("--binarize-src", action="store_true",
                        help="Only binarizes the source sentences.")
+    group.add_argument("--only-store-value", action="store_true",
+                       help="Only stores the values.")
     # fmt: on
     TranslationTask.add_args(parser)
 

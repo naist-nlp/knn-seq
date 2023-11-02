@@ -19,6 +19,7 @@ from fairseq.dataclass.utils import convert_namespace_to_omegaconf
 from tqdm import tqdm
 
 from knn_seq.data import KeyStorage
+from knn_seq.data.token_storage import TokenStorage
 from knn_seq.models import FairseqKNNModel
 from knn_seq.tasks import TranslationKnnTask
 
@@ -93,7 +94,10 @@ def main(args: Namespace):
     key_storage_paths = [
         os.path.join(task.cfg.data, fname) for fname in key_storage_fnames
     ]
-    size = len(dataset) if args.store_src_sent else sum(dataset.tgt_sizes)
+    if args.store_src_sent:
+        size = len(TokenStorage.load(os.path.dirname(task.cfg.src_value_path)))
+    else:
+        size = TokenStorage.load(os.path.dirname(task.cfg.knn_value_path)).size
     dtype = np.float16 if cfg.common.fp16 else np.float32
 
     dims = model.get_embed_dim()
@@ -124,7 +128,9 @@ def main(args: Namespace):
         )
         if not args.store_src_sent:
             net_outputs = [
-                decoder_out[prev_output_tokens.ne(tgt_dict.pad())]
+                decoder_out[:, args.ignore_prefix_size :][
+                    prev_output_tokens[:, args.ignore_prefix_size :].ne(tgt_dict.pad())
+                ]
                 for decoder_out in net_outputs
             ]
         for keys, key_storage in zip(net_outputs, key_storages):
@@ -146,7 +152,9 @@ def main(args: Namespace):
                 length = len(batch["id"])
             else:
                 length = (
-                    batch["net_input"]["prev_output_tokens"]
+                    batch["net_input"]["prev_output_tokens"][
+                        :, args.ignore_prefix_size :
+                    ]
                     .ne(tgt_dict.pad())
                     .sum()
                     .item()
@@ -196,6 +204,12 @@ def cli_main():
     )
     parser.add_argument(
         "--compress", action="store_true", help="compress the key storage"
+    )
+    parser.add_argument(
+        "--ignore-prefix-size",
+        type=int,
+        default=0,
+        help="ignore prefix size",
     )
     args = options.parse_args_and_arch(parser)
     main(args)

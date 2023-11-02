@@ -15,7 +15,6 @@ from data.fixtures import (  # pylint: disable=unused-import
 )
 from knn_seq import utils
 from knn_seq.models.fairseq_knn_model_base import FairseqKNNModelBase
-from knn_seq.models.fairseq_knn_transformer import KNNTransformer
 
 
 class FairseqKNNMockModel(FairseqKNNModelBase):
@@ -68,9 +67,6 @@ class TestFairseqKNNModelBase:
         dictionary = knn_model_base.single_model.decoder.dictionary
         assert knn_model_base.tgt_dict == dictionary
         assert knn_model_base.pad == dictionary.pad()
-
-        for m in knn_model_base.wrapped_models:
-            assert isinstance(m, KNNTransformer)
 
         assert knn_model_base.knn_weight == 0.0
         assert knn_model_base.knn_threshold == None
@@ -148,12 +144,13 @@ class TestFairseqKNNModelBase:
             features = knn_model_base(**net_inputs)
             feature_sizes = [feature.size() for feature in features]
 
-            decoder_outputs = [
+            _ = [
                 model(**net_inputs, features_only=True)
-                for model in knn_model_base.wrapped_models
+                for model in knn_model_base.models
             ]
+
             expected_features = [
-                decoder_out[1]["features"][0] for decoder_out in decoder_outputs
+                extractor.get() for extractor in knn_model_base.feature_extractors
             ]
             expected_sizes = [feature.size() for feature in expected_features]
             assert feature_sizes == expected_sizes
@@ -302,7 +299,7 @@ class TestFairseqKNNModelBase:
             tokens, encoder_outs, incremental_states
         )
 
-        for i, model in enumerate(knn_model_base.wrapped_models):
+        for i, model in enumerate(knn_model_base.models):
             if knn_model_base.has_encoder():
                 encoder_out = encoder_outs[i]
 
@@ -318,7 +315,7 @@ class TestFairseqKNNModelBase:
             decoder_len = len(decoder_out)
             if decoder_len > 1 and decoder_out[1] is not None:
                 if knn_model_base.knn_ensemble or i == 0:
-                    knn_queries = decoder_out[1]["features"][0][:, -1, :]
+                    knn_queries = knn_model_base.feature_extractors[i].get()[:, -1, :]
 
             if knn_model_base.knn_ensemble:
                 lprobs, knn_output = knn_model_base.add_knn_probs(

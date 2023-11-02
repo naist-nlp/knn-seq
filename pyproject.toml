@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "knn-seq"
-version = "0.1.0"
+version = "0.1.1"
 description = "Efficient, Extensible kNN-MT Framework"
 authors = ["Hiroyuki Deguchi <deguchi.hiroyuki.db0@is.naist.jp>"]
 license = "MIT"
