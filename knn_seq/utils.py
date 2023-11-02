@@ -1,46 +1,13 @@
-import fileinput
 import logging
 import time
 from collections import UserDict, UserList
-from typing import Any, Iterator, List
+from typing import Any, List
 
 import fairseq
 import torch
 from torch import Tensor
-from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-
-
-def read_lines(
-    input: str, buffer_size: int = 10000, progress: bool = False
-) -> Iterator[List[str]]:
-    """Reads lines from file or stdin.
-
-    Args:
-        input (str): input file path or `-` for stdin.
-        buffer_size (int): buffer size.
-
-    Yields:
-        List[str]: buffered input lines.
-    """
-    if buffer_size <= 0:
-        raise ValueError("buffer_size must be at least 1")
-
-    def progress_bar(buf):
-        if progress:
-            return tqdm(buf)
-        return buf
-
-    with fileinput.input([input], openhook=fileinput.hook_encoded("utf-8")) as f:
-        buffer = []
-        for line in progress_bar(f):
-            buffer.append(line)
-            if len(buffer) >= buffer_size:
-                yield buffer
-                buffer = []
-        if len(buffer) > 0:
-            yield buffer
 
 
 def to_device(item: Any, device: str = "cpu") -> Any:

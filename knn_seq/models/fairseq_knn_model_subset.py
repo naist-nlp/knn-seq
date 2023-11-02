@@ -127,7 +127,7 @@ class FairseqSubsetKNNModel(FairseqKNNModel):
         elif isinstance(self.src_knn_model, HFModelBase):
             tokenizer = self.src_knn_model.tokenizer
             src_query = self.src_knn_model(
-                tokenizer.collate(tokenizer.encode_lines(self.src_sents))
+                tokenizer.collate([tokenizer.encode(sent) for sent in self.src_sents])
             )
         else:
             raise NotImplementedError
