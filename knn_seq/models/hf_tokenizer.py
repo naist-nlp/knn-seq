@@ -3,8 +3,6 @@ from typing import Any, List
 from transformers import AutoTokenizer
 from transformers.tokenization_utils import BatchEncoding
 
-from knn_seq import utils
-
 
 class HFTokenizer:
     """Huggingface tokenizer wrapper class.
@@ -63,24 +61,20 @@ class HFTokenizer:
         Returns:
             BatchEncoding: huggingface model input.
         """
-        batch = {}
+        batch = []
         for sample in samples:
-            item = self.tokenizer.prepare_for_model(
-                sample,
-                None,
-                add_spenical_tokens=True,
-                padding=False,
-                truncation=True,
-                pad_to_multiple_of=None,
-                return_attention_mask=False,
-                return_tensors=None,
+            batch.append(
+                self.tokenizer.prepare_for_model(
+                    sample,
+                    None,
+                    add_spenical_tokens=True,
+                    padding=False,
+                    truncation=True,
+                    pad_to_multiple_of=None,
+                    return_attention_mask=False,
+                    return_tensors=None,
+                )
             )
-            for key, value in item.items():
-                if key not in batch:
-                    batch[key] = []
-                batch[key].append(value)
-
-        batch = self.tokenizer.pad(batch, padding=True, return_tensors="pt")
-        if self.device != "cpu":
-            batch = utils.to_device(batch, device=self.device)
-        return BatchEncoding(batch)
+        return self.tokenizer.pad(batch, padding=True, return_tensors="pt").to(
+            self.device
+        )

@@ -1,100 +1,11 @@
 import logging
 import time
-from collections import UserDict, UserList
 
 import numpy as np
 import pytest
 import torch
 
 from knn_seq import utils
-
-
-class TestToDevice:
-    @pytest.fixture
-    def tmp_tensor(self):
-        return torch.arange(5)
-
-    @pytest.mark.parametrize("src", ["cuda", "cpu"])
-    @pytest.mark.parametrize("dst", ["cuda", "cpu"])
-    def test_tensor(self, tmp_tensor, src, dst):
-        if not torch.cuda.is_available() and (src == "cuda" or dst == "cuda"):
-            pytest.skip("No CUDA available")
-
-        tmp_tensor = tmp_tensor.to(device=src)
-        result = utils.to_device(tmp_tensor, device=dst)
-        assert result.device.type == dst
-
-    @pytest.fixture
-    def tmp_tensor_dict(self):
-        temp_dict = {}
-        for i in range(5):
-            temp_dict[i] = torch.rand((3, 2)).cpu()
-
-        return temp_dict
-
-    @pytest.mark.parametrize("src", ["cuda", "cpu"])
-    @pytest.mark.parametrize("dst", ["cuda", "cpu"])
-    @pytest.mark.parametrize("is_user_dict", [True, False])
-    def test_tensor_dict(self, tmp_tensor_dict, src, dst, is_user_dict):
-        if not torch.cuda.is_available() and (src == "cuda" or dst == "cuda"):
-            pytest.skip("No CUDA available")
-
-        tmp_tensor_dict = {k: v.to(device=src) for k, v in tmp_tensor_dict.items()}
-
-        if is_user_dict:
-            tmp_tensor_dict = UserDict(tmp_tensor_dict)
-
-        result = utils.to_device(tmp_tensor_dict, device=dst)
-
-        for k, v in result.items():
-            assert v.device.type == dst
-
-        if is_user_dict:
-            assert isinstance(result, UserDict)
-        else:
-            assert isinstance(result, dict)
-
-    @pytest.fixture
-    def tmp_tensor_list(self):
-        temp_list = []
-        for i in range(5):
-            temp_list.append(torch.rand((3, 2)).cpu())
-
-        return temp_list
-
-    @pytest.mark.parametrize("src", ["cuda", "cpu"])
-    @pytest.mark.parametrize("dst", ["cuda", "cpu"])
-    @pytest.mark.parametrize("is_user_list", [True, False])
-    def test_tensor_list(self, tmp_tensor_list, src, dst, is_user_list):
-        if not torch.cuda.is_available() and (src == "cuda" or dst == "cuda"):
-            pytest.skip("No CUDA available")
-
-        tmp_tensor_list = [x.to(device=src) for x in tmp_tensor_list]
-
-        if is_user_list:
-            tmp_tensor_list = UserList(tmp_tensor_list)
-
-        result = utils.to_device(tmp_tensor_list, device=dst)
-
-        for x in result:
-            assert x.device.type == dst
-
-        if is_user_list:
-            assert isinstance(result, UserList)
-        else:
-            assert isinstance(result, list)
-
-    @pytest.mark.parametrize("item", ["hello", 1])
-    @pytest.mark.parametrize("device", ["cuda", "cpu"])
-    def test_other_input(self, item, device):
-        result = utils.to_device(item, device=device)
-        assert result == item
-
-    @pytest.mark.parametrize("device", ["cuda", "cpu"])
-    def test_nd_array(self, device):
-        item = np.arange(5)
-        result = utils.to_device(item, device=device)
-        assert np.array_equal(result, item)
 
 
 class TestPad:

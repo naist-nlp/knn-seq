@@ -1,34 +1,12 @@
 import logging
 import time
-from collections import UserDict, UserList
-from typing import Any, List
+from typing import List
 
 import fairseq
 import torch
 from torch import Tensor
 
 logger = logging.getLogger(__name__)
-
-
-def to_device(item: Any, device: str = "cpu") -> Any:
-    """Transfers tensors in arbitrary data structres to a specific device.
-
-    Args:
-        item (Any): arbitrary data structures.
-        device (str): tensors in `item` are transfered to specified devices.
-
-    Returns:
-        Any: the object that is trasfered to the device.
-    """
-    item_type = type(item)
-    if torch.is_tensor(item):
-        return item.to(device=device)
-    elif isinstance(item, (dict, UserDict)):
-        return item_type({k: to_device(v, device=device) for k, v in item.items()})
-    elif isinstance(item, (list, UserList)):
-        return item_type([to_device(x, device=device) for x in item])
-    else:
-        return item
 
 
 def pad(tensors: List[Tensor], padding_idx: int) -> Tensor:
