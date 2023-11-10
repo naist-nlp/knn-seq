@@ -6,7 +6,6 @@
 import logging
 import os.path
 import sys
-from dataclasses import dataclass, field
 from typing import List, Optional
 
 import torch
@@ -16,7 +15,6 @@ from fairseq.data.multilingual.multilingual_data_manager import (
     MultilingualDatasetManager,
 )
 from fairseq.data.multilingual.sampling_method import SamplingMethod
-from fairseq.dataclass import ChoiceEnum
 from fairseq.tasks import LegacyFairseqTask, register_task
 from fairseq.tasks.translation_multi_simple_epoch import TranslationMultiSimpleEpochTask
 from torch import LongTensor
@@ -353,13 +351,11 @@ class TranslationMultiSimpleEpochKnnTask(TranslationMultiSimpleEpochTask):
             prefix_tokens=prefix_tokens,
             constraints=constraints,
         )
-        if isinstance(model, FairseqKNNModel):
-            model.knn_timer.log_time("kNN")
+        if isinstance(model, FairseqKNNModelBase):
+            model.knn_timer.log("kNN")
         if isinstance(model, FairseqSubsetKNNModel):
-            model.src_knn_timer.log_time("Source search")
-            model.reorder_timer.log_time("Reorder")
             for i, sample_id in enumerate(sample["id"].tolist()):
                 src_knn_i = model.src_knn[i]
                 print("R-{}\t{}".format(sample_id, " ".join(map(str, src_knn_i))))
-
+        model.clear_cache()
         return results

@@ -72,7 +72,7 @@ class TestFairseqKNNModelBase:
         assert knn_model_base.knn_threshold == None
         assert knn_model_base.knn_ensemble == False
 
-        assert isinstance(knn_model_base.knn_timer, utils.StopwatchMeter)
+        assert isinstance(knn_model_base.knn_timer, utils.Stopwatch)
 
     def test_init_model(self, testdata_models) -> None:
         ensemble, _ = testdata_models
@@ -248,8 +248,8 @@ class TestFairseqKNNModelBase:
 
         lprobs, knn_output = knn_model_base.add_knn_probs(test_lprobs, test_queries)
 
-        assert knn_model_base.knn_timer.start_time is not None
-        assert knn_model_base.knn_timer.stop_time is not None
+        assert knn_model_base.knn_timer.acc is not None
+        assert knn_model_base.knn_timer.avg is not None
 
         assert torch.allclose(lprobs, expected_lprobs)
         assert torch.allclose(knn_output.scores, expected_knn_output.scores)

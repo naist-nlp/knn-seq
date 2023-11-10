@@ -64,7 +64,7 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
         self.knn_threshold: Optional[float] = None
         self.knn_ensemble = knn_ensemble
 
-        self.knn_timer = utils.StopwatchMeter()
+        self.knn_timer = utils.Stopwatch()
 
         self.register_feature_extractor(key)
 
@@ -239,7 +239,6 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
             Tensor: kNN-MT interpolated log-probability distribution.
             KNNOutput: kNN output dataclass.
         """
-        self.knn_timer.start()
         knn_output = self.search(querys, index_id=index_id)
         knn_probs = knn_output.probs
 
@@ -260,8 +259,6 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
         else:
             probs = (1.0 - self.knn_weight) * probs + knn_vocab_probs
         lprobs = torch.log(probs)
-
-        self.knn_timer.stop()
         return lprobs, knn_output
 
     def forward_decoder_with_knn(
@@ -332,7 +329,8 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
 
             # kNN-MT
             if self.knn_ensemble and knn_querys is not None:
-                lprobs, knn_output = self.add_knn_probs(lprobs, knn_querys, index_id=i)
+                with self.knn_timer():
+                    lprobs, knn_output = self.add_knn_probs(lprobs, knn_querys, index_id=i)
 
             if self.models_size == 1:
                 break
@@ -357,7 +355,8 @@ class FairseqKNNModelBase(EnsembleModel, metaclass=abc.ABCMeta):
 
         # kNN-MT
         if not self.knn_ensemble and knn_querys is not None:
-            lprobs, knn_output = self.add_knn_probs(lprobs, knn_querys)
+            with self.knn_timer():
+                lprobs, knn_output = self.add_knn_probs(lprobs, knn_querys)
 
         return lprobs, attn, knn_output
 
